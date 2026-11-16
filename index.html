@@ -305,10 +305,6 @@
             <span>🦴</span>
             <span id="skeletonToggleText">隱藏骨架</span>
           </button>
-          <button id="btnToggleFocus" class="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs font-semibold px-3 py-2 rounded-lg transition active:scale-95 flex items-center gap-1" title="自動放大並追蹤球員全身">
-            <span>🎯</span>
-            <span id="focusToggleText">聚焦球員</span>
-          </button>
         </div>
       </div>
     </div>
@@ -428,8 +424,6 @@
     const speedButtons = document.querySelectorAll('.speed-btn');
     const btnToggleSkeleton = document.getElementById('btnToggleSkeleton');
     const skeletonToggleText = document.getElementById('skeletonToggleText');
-    const btnToggleFocus = document.getElementById('btnToggleFocus');
-    const focusToggleText = document.getElementById('focusToggleText');
     const durationWarning = document.getElementById('durationWarning');
     const durationWarningText = document.getElementById('durationWarningText');
     const btnCloseWarning = document.getElementById('btnCloseWarning');
@@ -478,11 +472,6 @@
     let isTimelineDragging = false;
     let timelineSeekTarget = null;
     let showSkeleton = true;
-    let focusPlayer = false;
-
-    // Viewport for player focus mode { cropX, cropY, cropW, cropH } in video pixel units
-    let targetViewport = null;
-    let currentViewport = null;
 
     // MediaPipe & Detection State
     let pose = null;
@@ -686,8 +675,6 @@
       undoStack = [];
       redoStack = [];
       updateUndoRedoButtons();
-      targetViewport = null;
-      currentViewport = null;
 
       const objectUrl = URL.createObjectURL(file);
       if (video.srcObject) {
@@ -763,76 +750,6 @@
       }
     });
 
-    /* ==========================================================================
-       4. 聚焦球員視覺標定（100% 保持原始影片畫面，零裁切、不改變長寬比）
-       ========================================================================== */
-    function drawPlayerSpotlight(ctx, lm, bounds) {
-      if (!lm || lm.length === 0) return;
-      let minX = 1, maxX = 0, minY = 1, maxY = 0;
-      const keyIndices = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32];
-      for (const idx of keyIndices) {
-        const pt = lm[idx];
-        if (pt && Number.isFinite(pt.x) && Number.isFinite(pt.y)) {
-          minX = Math.min(minX, pt.x);
-          maxX = Math.max(maxX, pt.x);
-          minY = Math.min(minY, pt.y);
-          maxY = Math.max(maxY, pt.y);
-        }
-      }
-      if (maxX <= minX || maxY <= minY) return;
-
-      const p1 = mapVideoToCanvas(Math.max(0, minX - 0.04), Math.max(0, minY - 0.08));
-      const p2 = mapVideoToCanvas(Math.min(1, maxX + 0.04), Math.min(1, maxY + 0.04));
-      const boxX = p1.x;
-      const boxY = p1.y;
-      const boxW = p2.x - p1.x;
-      const boxH = p2.y - p1.y;
-
-      ctx.save();
-      // 周圍背景輕度微暗 (0.28)，柔和突出球員，全場所有細節依然 100% 可見
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
-      ctx.beginPath();
-      ctx.rect(bounds.destX, bounds.destY, bounds.destW, bounds.destH);
-      roundRect(ctx, boxX, boxY, boxW, boxH, 12);
-      ctx.fill('evenodd');
-
-      // 運動員追蹤角落瞄準標記 [  ]
-      ctx.strokeStyle = '#bef264';
-      ctx.lineWidth = 2.5;
-      ctx.lineCap = 'round';
-      const bracketLen = Math.min(22, boxW * 0.2, boxH * 0.2);
-
-      // 左上
-      ctx.beginPath();
-      ctx.moveTo(boxX, boxY + bracketLen);
-      ctx.lineTo(boxX, boxY);
-      ctx.lineTo(boxX + bracketLen, boxY);
-      ctx.stroke();
-
-      // 右上
-      ctx.beginPath();
-      ctx.moveTo(boxX + boxW - bracketLen, boxY);
-      ctx.lineTo(boxX + boxW, boxY);
-      ctx.lineTo(boxX + boxW, boxY + bracketLen);
-      ctx.stroke();
-
-      // 左下
-      ctx.beginPath();
-      ctx.moveTo(boxX, boxY + boxH - bracketLen);
-      ctx.lineTo(boxX, boxY + boxH);
-      ctx.lineTo(boxX + bracketLen, boxY + boxH);
-      ctx.stroke();
-
-      // 右下
-      ctx.beginPath();
-      ctx.moveTo(boxX + boxW - bracketLen, boxY + boxH);
-      ctx.lineTo(boxX + boxW, boxY + boxH);
-      ctx.lineTo(boxX + boxW, boxY + boxH - bracketLen);
-      ctx.stroke();
-
-      ctx.restore();
-    }
-
     /* 嚴格幾何長寬比計算：不論螢幕或容器如何縮放，影片與骨架絕對等比例繪製，永不壓縮、永不裁切 */
     function getRenderBounds(canvas = mainCanvas) {
       const cw = canvas.width || 1;
@@ -897,16 +814,6 @@
       const ch = mainCanvas.height;
 
       mainCtx.clearRect(0, 0, cw, ch);
-
-      // Native video handles frame presentation; this canvas stays transparent.
-      if (video.videoWidth && video.videoHeight) {
-        const b = getRenderBounds();
-
-        // 2. 若開啟「聚焦球員」：以視覺標定框突出球員，不改變或裁切影片
-        if (focusPlayer && currentLandmarks && currentLandmarks.length >= 25) {
-          drawPlayerSpotlight(mainCtx, currentLandmarks, b);
-        }
-      }
 
       // 3. 若開啟骨架顯示且有骨架資料，繪製精簡棒球骨架與角度
       if (showSkeleton && currentLandmarks && currentLandmarks.length >= 25) {
@@ -1631,8 +1538,6 @@
       expCtx.drawImage(video, 0, 0, exportCanvas.width, exportCanvas.height);
 
       // 2. 暫時將坐標對齊全畫面並繪製骨架
-      const savedViewport = currentViewport;
-      currentViewport = { x: 0, y: 0, w: video.videoWidth, h: video.videoHeight };
 
       if (showSkeleton && currentLandmarks && currentLandmarks.length >= 25) {
         drawSimplifiedBaseballSkeleton(expCtx, currentLandmarks, isCurrentLandmarkEstimated);
@@ -1677,7 +1582,6 @@
         expCtx.restore();
       }
 
-      currentViewport = savedViewport;
 
       // 觸發下載
       const link = document.createElement('a');
@@ -1951,19 +1855,6 @@
       btnToggleSkeleton.classList.toggle('bg-slate-800', !showSkeleton);
       btnToggleSkeleton.classList.toggle('text-slate-400', !showSkeleton);
       renderStage();
-    });
-
-    // 聚焦球員開關
-    btnToggleFocus.addEventListener('click', () => {
-      focusPlayer = !focusPlayer;
-      focusToggleText.textContent = focusPlayer ? "解除聚焦" : "聚焦球員";
-      btnToggleFocus.classList.toggle('bg-lime-400', focusPlayer);
-      btnToggleFocus.classList.toggle('text-slate-950', focusPlayer);
-      btnToggleFocus.classList.toggle('font-bold', focusPlayer);
-      btnToggleFocus.classList.toggle('bg-slate-800', !focusPlayer);
-      btnToggleFocus.classList.toggle('text-slate-300', !focusPlayer);
-      renderStage();
-      renderAnnotations();
     });
 
     // 鍵盤快速鍵
