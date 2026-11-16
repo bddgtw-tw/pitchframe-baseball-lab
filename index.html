@@ -2,10 +2,64 @@
 <html lang="zh-TW" class="h-full bg-slate-950 text-slate-100">
 <head>
   <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' blob:; worker-src 'self' blob:; font-src 'self'; base-uri 'none'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>投球逐格｜PitchFrame</title>
+  <title>投球逐格｜PitchFrame 同格驗證版</title>
   <!-- Bundled Tailwind CSS 3.4.17 -->
   <script src="./tailwind.js"></script>
+  <script>
+/* Local-only, bounded ISO-BMFF sample timeline. Unsupported layouts return null.
+ * No media payload is read. Indexes presentation samples, not guessed FPS.
+ */
+(function(root){
+'use strict';
+const MAX_MOOV=32*1024*1024, MAX_FRAMES=2000000;
+function fail(){throw new Error('Unsupported or malformed MP4 timeline');}
+function safe(n){if(!Number.isSafeInteger(n)||n<0)fail();return n;}
+function u64(v,p){return safe(v.getUint32(p)*4294967296+v.getUint32(p+4));}
+function i64(v,p){const n=v.getInt32(p)*4294967296+v.getUint32(p+4);if(!Number.isSafeInteger(n))fail();return n;}
+function type(v,p){return String.fromCharCode(...new Uint8Array(v.buffer,v.byteOffset+p,4));}
+function atoms(v,start,end){const out=[];for(let p=start;p<end;){if(end-p<8||out.length>100000)fail();let n=v.getUint32(p),h=8;const t=type(v,p+4);if(n===1){if(end-p<16)fail();n=u64(v,p+8);h=16;}else if(n===0)n=end-p;if(n<h||p+n>end)fail();out.push({t,p:p+h,end:p+n});p+=n;}return out;}
+function one(list,t,required=true){const a=list.filter(x=>x.t===t);if(a.length>1||required&&!a.length)fail();return a[0];}
+function children(v,a){return atoms(v,a.p,a.end);}
+function scale(v,a){const ver=v.getUint8(a.p);if(ver>1)fail();const n=v.getUint32(a.p+(ver===1?20:12));if(!n)fail();return n;}
+function table(v,a,signed=false){if(a.end-a.p<8)fail();const ver=v.getUint8(a.p);if(ver>1||(!signed&&ver!==0))fail();const count=v.getUint32(a.p+4);if(a.p+8+count*8!==a.end)fail();const rows=[];for(let p=a.p+8;p<a.end;p+=8){const n=v.getUint32(p),x=signed&&ver===1?v.getInt32(p+4):v.getUint32(p+4);if(!n)fail();rows.push([n,x]);}return rows;}
+async function getPitchFrameIndex(file,durationSeconds){
+try{
+ if(!file||!Number.isSafeInteger(file.size)||file.size<8) return null;
+ let moov=null,seenFtyp=false,headers=0;
+ for(let pos=0;pos<file.size;){if(++headers>10000||file.size-pos<8)fail();const b=await file.slice(pos,Math.min(pos+16,file.size)).arrayBuffer(),v=new DataView(b);let n=v.getUint32(0),h=8;const t=type(v,4);if(n===1){if(b.byteLength<16)fail();n=u64(v,8);h=16;}else if(n===0)n=file.size-pos;if(n<h||pos+n>file.size)fail();if(t==='ftyp')seenFtyp=true;if(t==='moof')fail();if(t==='moov'){if(moov||n>MAX_MOOV)fail();moov=new DataView(await file.slice(pos+h,pos+n).arrayBuffer());}pos+=n;}
+ if(!seenFtyp||!moov)return null;
+ const v=moov,top=atoms(v,0,v.byteLength);if(top.some(a=>a.t==='mvex'))fail();
+ const movieScale=scale(v,one(top,'mvhd'));
+ const tracks=top.filter(a=>a.t==='trak').map(a=>{const tc=children(v,a),m=one(tc,'mdia'),mc=children(v,m),h=one(mc,'hdlr');return {tc,mc,video:type(v,h.p+8)==='vide'};}).filter(t=>t.video);
+ if(tracks.length!==1)fail();const {tc,mc}=tracks[0],mediaScale=scale(v,one(mc,'mdhd'));
+ const stbl=one(children(v,one(mc,'minf')),'stbl'),sc=children(v,stbl),stts=table(v,one(sc,'stts'));
+ const sz=one(sc,'stsz');const count=v.getUint32(sz.p+8);if(!count||count>MAX_FRAMES)fail();
+ if(stts.reduce((s,r)=>s+r[0],0)!==count)fail();
+ const ctts=one(sc,'ctts',false),cts=ctts?table(v,ctts,true):[[count,0]];if(cts.reduce((s,r)=>s+r[0],0)!==count)fail();
+ let offset=0,mediaStart=0,editEnd=Infinity;
+ const edts=one(tc,'edts',false);
+ if(edts){const elst=one(children(v,edts),'elst',false);if(elst){const ver=v.getUint8(elst.p),n=v.getUint32(elst.p+4),width=ver===1?20:12;if(ver>1||n<1||n>2||elst.p+8+n*width!==elst.end)fail();let active=false;for(let j=0,p=elst.p+8;j<n;j++,p+=width){const duration=ver===1?u64(v,p):v.getUint32(p),mt=ver===1?i64(v,p+8):v.getInt32(p+4),rp=p+(ver===1?16:8);if(v.getInt16(rp)!==1||v.getInt16(rp+2)!==0||!duration)fail();if(mt===-1&&!active&&j===0&&n===2){offset=duration/movieScale;}else{if(active||mt<0)fail();active=true;mediaStart=mt;editEnd=offset+duration/movieScale;}}if(!active)fail();}}
+ const samples=[];let dts=0,ci=0,remaining=cts[0][0];
+ for(const [n,dt] of stts){if(!dt)fail();for(let j=0;j<n;j++){const pts=dts+cts[ci][1],time=offset+(pts-mediaStart)/mediaScale;if(time>=offset-1e-9&&time<editEnd-1e-9)samples.push({time:Math.max(offset,time),duration:dt/mediaScale});dts=safe(dts+dt);if(--remaining===0&&ci+1<cts.length)remaining=cts[++ci][0];}}
+ if(!samples.length)fail();samples.sort((a,b)=>a.time-b.time);
+ const times=Float64Array.from(samples,s=>s.time),durations=new Float64Array(times.length);
+ for(let i=0;i<times.length;i++){if(i&&times[i]-times[i-1]<1e-8)fail();durations[i]=i+1<times.length?times[i+1]-times[i]:Math.min(samples[i].duration,editEnd-times[i]);if(!(durations[i]>0))fail();}
+ const end=times[times.length-1]+durations[durations.length-1];
+ if(Number.isFinite(durationSeconds)&&durationSeconds>0){if(times[times.length-1]>=durationSeconds||Math.abs(end-durationSeconds)>Math.max(0.1,durations[durations.length-1]*2))fail();durations[durations.length-1]=Math.min(durations[durations.length-1],durationSeconds-times[times.length-1]);}
+ const frameAt=time=>{let lo=0,hi=times.length;while(lo<hi){const mid=(lo+hi)>>>1;if(times[mid]<=time+1e-7)lo=mid+1;else hi=mid;}return Math.max(0,lo-1);};
+ const clamp=i=>Math.max(0,Math.min(times.length-1,Math.trunc(i)));
+ const seekTime=i=>{i=clamp(i);return times[i]+Math.min(0.001,durations[i]*0.1);};
+ const step=(time,delta)=>{const index=clamp(frameAt(time)+delta);return {index,time:times[index],seekTime:seekTime(index)};};
+ const first=durations[0],variableFrameRate=Array.from(durations).some(d=>Math.abs(d-first)>Math.max(1e-6,first*0.001));
+ return {times,durations,frameAt,step,seekTime,frameCount:times.length,fps:variableFrameRate?null:1/first,variableFrameRate,source:'mp4-sample-table'};
+}catch(_){return null;}
+}
+root.getPitchFrameIndex=getPitchFrameIndex;
+if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameIndex};
+})(typeof globalThis!=='undefined'?globalThis:this);
+  </script>
   <!-- Bundled MediaPipe Pose 0.5.1675469404, same-origin assets -->
   <style>
     /* Mobile-first touch ergonomic rules */
@@ -272,6 +326,7 @@
     <div id="playbackDeck" class="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col gap-2.5 shadow-lg">
       
       <h2 class="operation-heading">播放與逐格</h2>
+      <div id="sourceFrameStatus" role="status" style="font-size:12px;color:#a8bbc8">選擇 MP4 後讀取原始影格</div>
       <!-- Timeline Scrubber -->
       <div id="timelineRow" class="flex items-center gap-3">
         <span id="timeCurrent" class="text-xs font-mono text-slate-300 w-12 text-right">00:00</span>
@@ -388,6 +443,7 @@
         <h2 id="resultsHeading">數值與匯出</h2>
         <span id="timeFrameBadge">00:00.0 (0格)</span>
       </div>
+    <p id="headAnchorNotice" style="margin:0 0 12px;color:#a8bbc8;font-size:12px;line-height:1.6">頭部小點是雙耳中點的位置示意，不代表精確顱骨中心或頭部前傾角；雙耳可信度不足時不顯示。</p>
     <!-- Telemetry Bar: Real-time Angles & Biomechanics (Clean, Read-only Badges) -->
     <div id="telemetryGrid" class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
       <!-- Trunk Tilt -->
@@ -568,7 +624,10 @@
     let isLooping = true;
     let currentSpeed = 1.0;
     let estimatedFps = 30;
-    let frameDuration = 1 / 30;
+    const fallbackFrameDuration = 1 / 30;
+    let sourceFrameIndex = null;
+    let frameIndexPending = false;
+    const sourceFrameStatus = document.getElementById("sourceFrameStatus");
     let videoDuration = 0;
     let effectiveDuration = 0;
     let isTimelineDragging = false;
@@ -611,6 +670,47 @@
     let isProcessingPose = false;
     let hasEverDetectedRealPerson = false;
     let currentLandmarks = null;
+    let currentPoseStamp = null;
+    let seekGeneration = 0;
+    let playbackGeneration = 0;
+    let presentedFrame = null;
+    let presentationCallback = null;
+    function invalidatePosePresentation() {
+      ++seekGeneration; currentLandmarks = null; currentPoseStamp = null;
+      presentedFrame = null; lastSentFrame = null;
+      if (presentationCallback !== null && video.cancelVideoFrameCallback) video.cancelVideoFrameCallback(presentationCallback);
+      presentationCallback = null;
+      renderStage();
+    }
+    function frameStamp() {
+      if (video.seeking || video.readyState < 2) return null;
+      if (typeof video.requestVideoFrameCallback === 'function') {
+        if (!presentedFrame || presentedFrame.source !== sourceGeneration || presentedFrame.seek !== seekGeneration
+          || Math.abs(presentedFrame.position - video.currentTime) > 0.00001) return null;
+        return {...presentedFrame};
+      }
+      // No presented-frame API: only use an unchanged decoded time; never a nearby 30 fps bucket.
+      return {source:sourceGeneration, seek:seekGeneration, time:video.currentTime, position:video.currentTime};
+    }
+    function sameFrame(a,b) {
+      return !!a && !!b && a.source===b.source && a.seek===b.seek && Math.abs(a.time-b.time)<0.00001;
+    }
+    function poseMatchesFrame() { return sameFrame(currentPoseStamp, frameStamp()); }
+    function observePresentedFrame() {
+      if (typeof video.requestVideoFrameCallback !== 'function' || presentationCallback !== null) return;
+      const source = sourceGeneration, seek = seekGeneration;
+      presentationCallback = video.requestVideoFrameCallback((now, metadata) => {
+        if (source !== sourceGeneration || seek !== seekGeneration) return;
+        presentationCallback = null;
+        presentedFrame = {source,seek,time:metadata.mediaTime,position:video.currentTime};
+        renderStage(); triggerPoseInference(); observePresentedFrame();
+      });
+    }
+    video.addEventListener('seeking', () => { invalidatePosePresentation(); observePresentedFrame(); });
+    video.addEventListener('seeked', () => { observePresentedFrame(); });
+    video.addEventListener('loadeddata', observePresentedFrame);
+    video.addEventListener('play', observePresentedFrame);
+
     let isCurrentLandmarkEstimated = false;
 
     // Pose frame cache: key is quantized frame index Math.round(time * 30)
@@ -687,7 +787,9 @@
        ========================================================================== */
     function onPoseResults(results) {
       if (activePoseJob) activePoseJob.received = true;
-      const curTime = activePoseJob ? activePoseJob.time : (video.currentTime || 0);
+      if (!activePoseJob || !sameFrame(activePoseJob.stamp, frameStamp())) return;
+      currentPoseStamp = activePoseJob.stamp;
+      const curTime = activePoseJob.time;
       const frameKey = Math.round(curTime * 30);
 
       if (results.poseLandmarks && results.poseLandmarks.length >= 25) {
@@ -719,12 +821,14 @@
     async function triggerPoseInference() {
       if (!isPoseModelReady || !pose) return;
       if (video.readyState < 2 || video.seeking || !video.videoWidth || !video.videoHeight) return;
-      let frameKey = sourceGeneration + ':' + video.currentTime.toFixed(4);
+      const stamp = frameStamp();
+      if (!stamp) { observePresentedFrame(); return; }
+      let frameKey = stamp.source + ':' + stamp.seek + ':' + stamp.time.toFixed(6);
       if (isProcessingPose) { pendingPoseFrame = true; return; }
       if (frameKey === lastSentFrame) return;
       const engine = pose, epoch = poseEpoch;
       isProcessingPose = true; pendingPoseFrame = false;
-      activePoseJob = { time: video.currentTime || 0, source: sourceGeneration };
+      activePoseJob = { time: stamp.time, source: sourceGeneration, stamp };
       const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight));
       inferenceCanvas.width = Math.max(1, Math.round(video.videoWidth * scale));
       inferenceCanvas.height = Math.max(1, Math.round(video.videoHeight * scale));
@@ -733,12 +837,11 @@
           await withPoseTimeout(Promise.resolve(engine.reset()), 10000, '模型重設逾時');
           modelSourceGeneration = sourceGeneration;
         }
-        if (activePoseJob.source !== sourceGeneration || video.seeking || video.readyState < 2) return;
-        activePoseJob.time = video.currentTime || 0;
-        frameKey = sourceGeneration + ':' + video.currentTime.toFixed(4);
+        if (!activePoseJob || !sameFrame(stamp, frameStamp())) return;
+        activePoseJob.time = stamp.time;
         // Freeze the entire decoded frame; never crop or stretch the inference input.
         inferenceCtx.drawImage(video, 0, 0, inferenceCanvas.width, inferenceCanvas.height);
-        reportPoseStatus('正在辨識影格', `辨識 ${activePoseJob.time.toFixed(3)} 秒中；若仍顯示骨架，那是最近完成的結果，並非目前影格的新結果。`);
+        reportPoseStatus('正在辨識影格', `辨識 ${activePoseJob.time.toFixed(3)} 秒中；只顯示與目前影格一致的結果；播放中可能暫時隱藏，暫停後等待辨識。`);
         await withPoseTimeout(engine.send({ image: inferenceCanvas }), 30000, '影格辨識超過 30 秒，可能是 WebGL／模型載入失敗');
         if (epoch === poseEpoch && activePoseJob && activePoseJob.source === sourceGeneration && !activePoseJob.received) {
           throw new Error('AI 執行完成但未回傳結果，請重新載入模型');
@@ -762,7 +865,10 @@
        ========================================================================== */
     function handleVideoFile(file) {
       if (!file) return;
-      ++sourceGeneration; lastSentFrame = null;
+      ++sourceGeneration; ++playbackGeneration; isPlaying = false; invalidatePosePresentation(); lastSentFrame = null;
+      const openedSource = sourceGeneration;
+      sourceFrameIndex = null; frameIndexPending = true;
+      sourceFrameStatus.textContent = '正在讀取原始影格索引…';
       isTimelineDragging = false; timelineSeekTarget = null;
       emptyPrompt.classList.add('hidden');
       statusText.textContent = "載入影片中...";
@@ -788,6 +894,15 @@
 
       video.onloadedmetadata = () => {
         videoDuration = video.duration || 0;
+        getPitchFrameIndex(file, videoDuration).then(index => {
+          if (openedSource !== sourceGeneration) return;
+          frameIndexPending = false; sourceFrameIndex = index;
+          sourceFrameStatus.textContent = index ? (index.variableFrameRate
+            ? '已讀取原始影格｜可變幀率'
+            : `已讀取原始影格｜${Number(index.fps?.toFixed(2)) || '未標稱'} fps`)
+            : '此格式沒有可用的影格索引｜±1 約 0.033 秒';
+          renderStage();
+        });
         
         // 檢查 30 秒限制
         if (videoDuration > MAX_ALLOWED_DURATION) {
@@ -895,8 +1010,14 @@
     /* ==========================================================================
        5. 角度計算工具
        ========================================================================== */
+    function credibleBodyPoint(p) {
+      return !!p && Number.isFinite(p.x) && Number.isFinite(p.y)
+        && p.x>=0 && p.x<=1 && p.y>=0 && p.y<=1
+        && Number.isFinite(p.visibility) && p.visibility>=0.65
+        && (p.presence===undefined || (Number.isFinite(p.presence) && p.presence>=0.65));
+    }
     function calculateAngle(a, b, c) {
-      if (!a || !b || !c) return null;
+      if (![a,b,c].every(credibleBodyPoint)) return null;
       const abx = a.x - b.x, aby = a.y - b.y;
       const cbx = c.x - b.x, cby = c.y - b.y;
       const dot = abx * cbx + aby * cby;
@@ -918,7 +1039,7 @@
       mainCtx.clearRect(0, 0, cw, ch);
 
       // 3. 若開啟骨架顯示且有骨架資料，繪製精簡棒球骨架與角度
-      if (showSkeleton && currentLandmarks && currentLandmarks.length >= 25) {
+      if (showSkeleton && poseMatchesFrame() && currentLandmarks && currentLandmarks.length >= 25) {
         drawSimplifiedBaseballSkeleton(mainCtx, currentLandmarks, isCurrentLandmarkEstimated);
       }
 
@@ -926,18 +1047,31 @@
       updateTelemetryAndCounters();
     }
 
+    // Conservative display anchor, not an anatomical cranial center or head-pitch measurement.
+    // Both ears must be credible. A helmet, profile or occlusion may legitimately hide this marker.
+    const HEAD_EAR_MIN_VISIBILITY = 0.65;
+    function getHeadPositionAnchor(lm, minVisibility = HEAD_EAR_MIN_VISIBILITY) {
+      if (!lm) return null;
+      const credible = point => point && Number.isFinite(point.x) && Number.isFinite(point.y)
+        && point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1
+        && Number.isFinite(point.visibility) && point.visibility >= minVisibility
+        && (point.presence === undefined || (Number.isFinite(point.presence) && point.presence >= minVisibility));
+      const left = lm[7], right = lm[8];
+      if (!credible(left) || !credible(right)) return null;
+      return { x: (left.x + right.x) / 2, y: (left.y + right.y) / 2,
+        confidence: Math.min(left.visibility, right.visibility), method: 'bilateral-ear-midpoint' };
+    }
+
     /* 繪製棒球專用精簡骨架：
        頭部、左右肩/肘/腕/髖/膝/踝、骨盆中心、腳掌三角形、身體中軸與角度標記 */
     function drawSimplifiedBaseballSkeleton(ctx, lm, isEstimated) {
       const p = (idx) => {
         const pt = lm[idx];
-        if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) return null;
+        if (!credibleBodyPoint(pt)) return null;
         return mapVideoToCanvas(pt.x, pt.y, ctx.canvas);
       };
 
       // 關鍵節點像素坐標
-      const nose = p(0);
-      const leftEar = p(7), rightEar = p(8);
       const leftShoulder = p(11), rightShoulder = p(12);
       const leftElbow = p(13), rightElbow = p(14);
       const leftWrist = p(15), rightWrist = p(16);
@@ -957,11 +1091,9 @@
         pelvisCenter = { x: (leftHip.x + rightHip.x) / 2, y: (leftHip.y + rightHip.y) / 2 };
       }
 
-      // 頭部中心
-      let headCenter = nose || (leftEar && rightEar ? { x: (leftEar.x + rightEar.x) / 2, y: (leftEar.y + rightEar.y) / 2 } : null);
-      if (!headCenter && midShoulder) {
-        headCenter = { x: midShoulder.x, y: midShoulder.y - (ctx.canvas.height * 0.1) };
-      }
+      // Schematic head position from two reliable ears. No nose/shoulder extrapolation.
+      const headAnchor = getHeadPositionAnchor(lm);
+      const headCenter = headAnchor ? mapVideoToCanvas(headAnchor.x, headAnchor.y, ctx.canvas) : null;
 
       ctx.save();
       // 若為估算骨架，線條設定為虛線與琥珀色
@@ -1052,16 +1184,16 @@
         drawSegment(rightAnkle, rightToe, '#c084fc', 2.5);
       }
 
-      // F. 頭部與頸部
+      // F. 頭部位置小點與連線；不繪製可能被誤認為顱骨輪廓的大圓圈
       if (headCenter && midShoulder) {
         drawSegment(headCenter, midShoulder, '#e2e8f0', 2.5);
         ctx.beginPath();
-        const headRadius = Math.max(14, Math.min(32, ctx.canvas.height * 0.035));
+        const headRadius = Math.max(3, Math.min(6, ctx.canvas.height / 180));
         ctx.arc(headCenter.x, headCenter.y, headRadius, 0, Math.PI * 2);
-        ctx.fillStyle = isEstimated ? 'rgba(251, 191, 36, 0.2)' : 'rgba(248, 250, 252, 0.2)';
+        ctx.fillStyle = '#f8fafc';
         ctx.fill();
-        ctx.strokeStyle = isEstimated ? '#fbbf24' : '#f8fafc';
-        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 1.5;
         ctx.stroke();
       }
 
@@ -1147,7 +1279,7 @@
         });
       }
       if (trunkTiltAngle !== null && (headCenter || midShoulder)) {
-        // 放在頭部上方，絕不遮擋球員臉部
+        // 頭部位置僅用於標籤定位；軀幹傾角仍由肩／髖計算
         const tiltAnchor = headCenter || midShoulder;
         badges.push({
           anchor: tiltAnchor,
@@ -1263,16 +1395,16 @@
     /* 更新遙測欄與播放格數計數器 */
     function updateTelemetryAndCounters() {
       const curTime = timelineSeekTarget !== null ? timelineSeekTarget : (video.currentTime || 0);
-      const curFrame = Math.round(curTime * 30);
-      timeFrameBadge.textContent = `${formatTime(curTime)} (${curFrame}格)`;
+      const curFrame = sourceFrameIndex ? sourceFrameIndex.frameAt(curTime) : -1;
+      timeFrameBadge.textContent = `${formatTime(curTime)}${curFrame >= 0 ? `（第 ${curFrame + 1} 格）` : ''}`;
       timeCurrent.textContent = formatTime(curTime);
 
       if (!isTimelineDragging && timelineSeekTarget === null && effectiveDuration > 0) {
         scrubber.value = Math.min(100, (curTime / effectiveDuration) * 100);
       }
 
-      if (!currentLandmarks || currentLandmarks.length < 25) {
-        telTrunkTilt.textContent = '--°';
+      if (!poseMatchesFrame() || !currentLandmarks || currentLandmarks.length < 25) {
+        telTrunkTilt.textContent = '--°'; telTrunkDirection.textContent = '資料不足';
         telLeftElbow.textContent = '--°';
         telRightElbow.textContent = '--°';
         telLeftKnee.textContent = '--°';
@@ -1292,7 +1424,7 @@
       telLeftKnee.textContent = leftKneeAngle !== null ? `${leftKneeAngle}°` : '--°';
       telRightKnee.textContent = rightKneeAngle !== null ? `${rightKneeAngle}°` : '--°';
 
-      if (lm[11] && lm[12] && lm[23] && lm[24]) {
+      if ([lm[11],lm[12],lm[23],lm[24]].every(credibleBodyPoint)) {
         const midShoulder = { x: (lm[11].x + lm[12].x) / 2, y: (lm[11].y + lm[12].y) / 2 };
         const pelvisCenter = { x: (lm[23].x + lm[24].x) / 2, y: (lm[23].y + lm[24].y) / 2 };
         const dx = midShoulder.x - pelvisCenter.x;
@@ -1302,7 +1434,7 @@
         telTrunkTilt.textContent = `${Math.abs(deg)}°`;
         telTrunkDirection.textContent = deg > 1 ? '右/前傾' : deg < -1 ? '左/後傾' : '中軸鉛直';
       } else {
-        telTrunkTilt.textContent = '--°';
+        telTrunkTilt.textContent = '--°'; telTrunkDirection.textContent = '資料不足';
       }
     }
 
@@ -1314,18 +1446,22 @@
       if (video.currentTime >= effectiveDuration) {
         video.currentTime = 0;
       }
+      const playbackToken = ++playbackGeneration;
+      const playbackSource = sourceGeneration;
       video.play().then(() => {
+        if (playbackToken !== playbackGeneration || playbackSource !== sourceGeneration) return;
         isPlaying = true;
         playIcon.textContent = "⏸ 暫停";
         btnPlayPause.classList.replace('bg-lime-400', 'bg-amber-400');
         btnPlayPause.classList.replace('hover:bg-lime-300', 'hover:bg-amber-300');
-        requestPlaybackTick();
+        requestPlaybackTick(playbackToken);
       }).catch(err => {
         console.warn("Play interrupted:", err);
       });
     }
 
     function pauseVideo() {
+      ++playbackGeneration;
       isPlaying = false;
       video.pause();
       playIcon.textContent = "▶ 播放";
@@ -1337,9 +1473,24 @@
 
     function stepFrame(delta) {
       pauseVideo();
-      if (!effectiveDuration) return;
-      const targetTime = Math.max(0, Math.min(effectiveDuration, video.currentTime + delta * frameDuration));
+      if (!effectiveDuration || frameIndexPending) return;
+      const base = timelineSeekTarget !== null ? timelineSeekTarget : video.currentTime;
+      let targetTime;
+      if (sourceFrameIndex) {
+        const step = sourceFrameIndex.step(base, delta);
+        const limit = Math.max(0, effectiveDuration - 0.000001);
+        const last = sourceFrameIndex.frameAt(limit);
+        if (!step || last < 0) return;
+        targetTime = Math.min(limit, sourceFrameIndex.seekTime(Math.min(step.index,last)));
+      } else {
+        targetTime = Math.max(0, Math.min(effectiveDuration, base + delta * fallbackFrameDuration));
+      }
+      timelineSeekTarget = targetTime;
       video.currentTime = targetTime;
+      if (!video.seeking) {
+        timelineSeekTarget = null;
+        observePresentedFrame(); triggerPoseInference(); renderStage();
+      }
       video.onseeked = () => {
         triggerPoseInference();
         renderStage();
@@ -1347,8 +1498,8 @@
       };
     }
 
-    function requestPlaybackTick() {
-      if (!isPlaying) return;
+    function requestPlaybackTick(token = playbackGeneration) {
+      if (!isPlaying || token !== playbackGeneration) return;
 
       // 檢查 30 秒或結尾
       if (video.currentTime >= effectiveDuration) {
@@ -1364,7 +1515,7 @@
       triggerPoseInference();
       renderStage();
 
-      requestAnimationFrame(requestPlaybackTick);
+      requestAnimationFrame(() => requestPlaybackTick(token));
     }
 
     /* 時間格式化 helper mm:ss.s */
@@ -1630,6 +1781,12 @@
       }
       pauseVideo();
 
+      if (video.seeking || video.readyState < 2) {
+        alert('影片仍在跳轉，請等畫面穩定後再匯出。'); return;
+      }
+      if (showSkeleton && !poseMatchesFrame()) {
+        alert('目前影格的骨架尚未完成。這次 PNG 只匯出原影片與手動畫記，不含骨架；若需要骨架請稍候再按匯出。');
+      }
       // 建立高解析度畫布
       const exportCanvas = document.createElement('canvas');
       exportCanvas.width = video.videoWidth;
@@ -1641,7 +1798,7 @@
 
       // 2. 暫時將坐標對齊全畫面並繪製骨架
 
-      if (showSkeleton && currentLandmarks && currentLandmarks.length >= 25) {
+      if (showSkeleton && poseMatchesFrame() && currentLandmarks && currentLandmarks.length >= 25) {
         drawSimplifiedBaseballSkeleton(expCtx, currentLandmarks, isCurrentLandmarkEstimated);
       }
 
@@ -1695,6 +1852,7 @@
 
     // 輸出骨架分析影片 (嚴格遵循瀏覽器支援，絕不將 WebM 假裝為 MP4)
     btnExportVideo.addEventListener('click', async () => {
+      alert('影片輸出只合成與當前影格一致的骨架。AI 趕不上播放時會省略骨架，不沿用上一格；需要完整骨架時請改用暫停後的 PNG。');
       if (!video.videoWidth || !video.videoHeight || !effectiveDuration) {
         alert("請先載入球員影片！");
         return;
@@ -1786,7 +1944,7 @@
         expCtx.drawImage(video, 0, 0, exportCanvas.width, exportCanvas.height);
 
         // 繪製骨架與標註
-        if (showSkeleton && currentLandmarks && currentLandmarks.length >= 25) {
+        if (showSkeleton && poseMatchesFrame() && currentLandmarks && currentLandmarks.length >= 25) {
           drawSimplifiedBaseballSkeleton(expCtx, currentLandmarks, isCurrentLandmarkEstimated);
         }
 
