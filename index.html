@@ -19,6 +19,7 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
       touch-action: manipulation;
     }
+    #scrubber { touch-action: none; }
     /* Scrubber thumb custom style */
     input[type=range]::-webkit-slider-thumb {
       appearance: none;
@@ -474,6 +475,8 @@
     let frameDuration = 1 / 30;
     let videoDuration = 0;
     let effectiveDuration = 0;
+    let isTimelineDragging = false;
+    let timelineSeekTarget = null;
     let showSkeleton = true;
     let focusPlayer = false;
 
@@ -669,6 +672,7 @@
     function handleVideoFile(file) {
       if (!file) return;
       ++sourceGeneration; lastSentFrame = null;
+      isTimelineDragging = false; timelineSeekTarget = null;
       emptyPrompt.classList.add('hidden');
       statusText.textContent = "載入影片中...";
       statusDot.className = "w-2 h-2 rounded-full bg-yellow-400 animate-pulse";
@@ -1249,12 +1253,12 @@
 
     /* 更新遙測欄與播放格數計數器 */
     function updateTelemetryAndCounters() {
-      const curTime = video.currentTime || 0;
+      const curTime = timelineSeekTarget !== null ? timelineSeekTarget : (video.currentTime || 0);
       const curFrame = Math.round(curTime * 30);
       timeFrameBadge.textContent = `${formatTime(curTime)} (${curFrame}格)`;
       timeCurrent.textContent = formatTime(curTime);
 
-      if (effectiveDuration > 0) {
+      if (!isTimelineDragging && timelineSeekTarget === null && effectiveDuration > 0) {
         scrubber.value = Math.min(100, (curTime / effectiveDuration) * 100);
       }
 
@@ -1879,15 +1883,49 @@
       btnLoop.classList.toggle('text-slate-400', !isLooping);
     });
 
-    // 時間軸拖曳
+    // Native range owns the thumb during interaction. Capture its value BEFORE
+    // pauseVideo(), which renders and otherwise overwrites it with the old time.
+    function finishTimelineDrag() {
+      isTimelineDragging = false;
+      updateTelemetryAndCounters();
+    }
+    scrubber.addEventListener('pointerdown', (event) => {
+      if (event.button !== undefined && event.button !== 0) return;
+      isTimelineDragging = true;
+      if (scrubber.setPointerCapture) {
+        try { scrubber.setPointerCapture(event.pointerId); } catch (_) {}
+      }
+    });
     scrubber.addEventListener('input', () => {
+      const percent = Number(scrubber.value);
+      if (!(effectiveDuration > 0) || !Number.isFinite(percent)) return;
+      const target = Math.max(0, Math.min(effectiveDuration, percent / 100 * effectiveDuration));
+      timelineSeekTarget = target;
+      // Keep the existing UX: scrubbing pauses, never silently restarts audio.
       pauseVideo();
-      if (effectiveDuration > 0) {
-        video.currentTime = (scrubber.value / 100) * effectiveDuration;
+      video.currentTime = target;
+      updateTelemetryAndCounters();
+      // A no-op seek may not emit seeked. Real seeks are handled on decoded completion.
+      if (!video.seeking && video.readyState >= 2 && Math.abs(video.currentTime - target) < 0.001) {
+        timelineSeekTarget = null;
         triggerPoseInference();
         renderStage();
       }
     });
+    video.addEventListener('seeked', () => {
+      if (timelineSeekTarget !== null && !video.seeking && Math.abs(video.currentTime - timelineSeekTarget) < 0.05) {
+        timelineSeekTarget = null;
+      }
+      updateTelemetryAndCounters();
+    });
+    // Native input/change also supports keyboard and accessibility controls.
+    scrubber.addEventListener('change', finishTimelineDrag);
+    scrubber.addEventListener('pointerup', finishTimelineDrag);
+    scrubber.addEventListener('pointercancel', finishTimelineDrag);
+    scrubber.addEventListener('lostpointercapture', finishTimelineDrag);
+    scrubber.addEventListener('blur', finishTimelineDrag);
+    window.addEventListener('pointerup', finishTimelineDrag);
+    window.addEventListener('pointercancel', finishTimelineDrag);
 
     // 速度選擇
     speedButtons.forEach(btn => {
