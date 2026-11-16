@@ -675,7 +675,91 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     let playbackGeneration = 0;
     let presentedFrame = null;
     let presentationCallback = null;
+    // Scrubbing serializes decode + inference. New thumb input only replaces the queued target.
+    let scrubSession = false, scrubFlight = null, scrubQueuedTarget = null, scrubPair = null;
+    function captureDecodedFrame() {
+      const canvas = document.createElement('canvas');
+      const scale = Math.min(1,960/Math.max(video.videoWidth,video.videoHeight));
+      canvas.width = Math.max(1,Math.round(video.videoWidth*scale)); canvas.height = Math.max(1,Math.round(video.videoHeight*scale));
+      canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+      return canvas;
+    }
+    function startScrubSession() {
+      if (scrubSession) return;
+      scrubSession = true;
+      if (video.readyState >= 2 && !video.seeking && video.videoWidth) {
+        scrubPair = {image:captureDecodedFrame(), landmarks:poseMatchesFrame() && currentLandmarks ? currentLandmarks.map(p=>({...p})) : null,
+          time:video.currentTime,source:sourceGeneration};
+      }
+    }
+    function endScrubSession() {
+      scrubSession=false; scrubFlight=null; scrubQueuedTarget=null; scrubPair=null;
+    }
+    function leaveScrubForNativeVideo() {
+      const target = scrubQueuedTarget !== null ? scrubQueuedTarget : scrubFlight;
+      endScrubSession();
+      if (target !== null && Number.isFinite(target)) { timelineSeekTarget=target; video.currentTime=target; }
+      renderStage();
+    }
+    function pumpScrubQueue() {
+      if (scrubSession && !isPoseModelReady) { leaveScrubForNativeVideo(); return; }
+      if (!scrubSession || scrubFlight !== null || isProcessingPose || video.seeking) return;
+      if (scrubQueuedTarget === null) {
+        if (!isTimelineDragging) { endScrubSession(); timelineSeekTarget=null; renderStage(); }
+        return;
+      }
+      scrubFlight = scrubQueuedTarget; scrubQueuedTarget = null;
+      // Invalidate even for a no-op seek, so its result belongs to this request.
+      invalidatePosePresentation();
+      video.currentTime = scrubFlight;
+      observePresentedFrame();
+      if (!video.seeking) { schedulePausedRecovery(); triggerPoseInference(); }
+      renderStage();
+    }
+    let pausedRecoveryToken = 0;
+    let pausedRecoveryTimer = null;
+    function cancelPausedRecovery() {
+      ++pausedRecoveryToken;
+      if (pausedRecoveryTimer !== null) clearTimeout(pausedRecoveryTimer);
+      pausedRecoveryTimer = null;
+    }
+    function schedulePausedRecovery() {
+      cancelPausedRecovery();
+      if (!video.paused || video.seeking || video.readyState < 2) return;
+      if (frameStamp()) { triggerPoseInference(); return; }
+      const token = pausedRecoveryToken, source = sourceGeneration, seek = seekGeneration;
+      const position = video.currentTime;
+      const stable = () => token === pausedRecoveryToken && source === sourceGeneration && seek === seekGeneration
+        && video.paused && !video.seeking && video.readyState >= 2
+        && Number.isFinite(position) && Math.abs(video.currentTime - position) < 0.00001
+        && (scrubSession ? (scrubFlight !== null && Math.abs(scrubFlight-position)<0.00001)
+          : (timelineSeekTarget === null || Math.abs(timelineSeekTarget - position) < 0.00001));
+      reportPoseStatus('正在更新目前影格', '影片已暫停，正在同步解碼畫面與 AI 骨架；不沿用上一格。');
+      const commit = () => {
+        if (!stable()) return;
+        // A paused seek may decode without producing a new compositor callback.
+        // HAVE_CURRENT_DATA + completed seek + unchanged play position is the fallback contract.
+        if (!frameStamp()) {
+          let time = position;
+          if (sourceFrameIndex) {
+            const i = sourceFrameIndex.frameAt(position);
+            const start = sourceFrameIndex.times[i], duration = sourceFrameIndex.durations[i];
+            if (!Number.isFinite(start) || !(duration > 0) || position < start - 0.00001
+              || position >= start + duration + 0.00001) return;
+            time = start;
+          }
+          presentedFrame = {source,seek,time,position,pausedSnapshot:true};
+        }
+        cancelPausedRecovery();
+        renderStage(); triggerPoseInference();
+      };
+      // Two rendering opportunities; bounded timeout also handles background/throttled RAF.
+      requestAnimationFrame(() => { if (stable()) requestAnimationFrame(commit); });
+      pausedRecoveryTimer = setTimeout(commit, 160);
+    }
+
     function invalidatePosePresentation() {
+      cancelPausedRecovery();
       ++seekGeneration; currentLandmarks = null; currentPoseStamp = null;
       presentedFrame = null; lastSentFrame = null;
       if (presentationCallback !== null && video.cancelVideoFrameCallback) video.cancelVideoFrameCallback(presentationCallback);
@@ -686,6 +770,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (video.seeking || video.readyState < 2) return null;
       if (typeof video.requestVideoFrameCallback === 'function') {
         if (!presentedFrame || presentedFrame.source !== sourceGeneration || presentedFrame.seek !== seekGeneration
+          || (presentedFrame.pausedSnapshot && !video.paused)
           || Math.abs(presentedFrame.position - video.currentTime) > 0.00001) return null;
         return {...presentedFrame};
       }
@@ -702,14 +787,21 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       presentationCallback = video.requestVideoFrameCallback((now, metadata) => {
         if (source !== sourceGeneration || seek !== seekGeneration) return;
         presentationCallback = null;
+        // Reject a queued presentation from before a paused indexed seek.
+        if (!Number.isFinite(metadata.mediaTime)) { observePresentedFrame(); return; }
+        if (video.paused && sourceFrameIndex &&
+          sourceFrameIndex.frameAt(metadata.mediaTime) !== sourceFrameIndex.frameAt(video.currentTime)) {
+          observePresentedFrame(); schedulePausedRecovery(); return;
+        }
         presentedFrame = {source,seek,time:metadata.mediaTime,position:video.currentTime};
         renderStage(); triggerPoseInference(); observePresentedFrame();
       });
     }
-    video.addEventListener('seeking', () => { invalidatePosePresentation(); observePresentedFrame(); });
-    video.addEventListener('seeked', () => { observePresentedFrame(); });
+    video.addEventListener('seeking', () => { invalidatePosePresentation(); reportPoseStatus('正在更新目前影格', '正在跳轉影片，解碼完成後重新辨識；不沿用上一格。'); observePresentedFrame(); });
+    video.addEventListener('seeked', () => { observePresentedFrame(); schedulePausedRecovery(); });
     video.addEventListener('loadeddata', observePresentedFrame);
-    video.addEventListener('play', observePresentedFrame);
+    video.addEventListener('play', () => { cancelPausedRecovery(); observePresentedFrame(); renderStage(); });
+    video.addEventListener('pause', schedulePausedRecovery);
 
     let isCurrentLandmarkEstimated = false;
 
@@ -735,12 +827,40 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     /* ==========================================================================
        1. 初始化 MediaPipe Pose 模型
        ========================================================================== */
+    // Probe the same canvas context APIs used by bundled MediaPipe before loading it.
+    // A detached canvas never touches the video or drawing surface. Release only our context.
+    function checkPoseWebGL() {
+      const probe = document.createElement('canvas');
+      probe.width = 1; probe.height = 1;
+      let gl = null;
+      try {
+        gl = probe.getContext('webgl2', {}) || probe.getContext('webgl', {});
+        return !!gl && !gl.isContextLost();
+      } catch (_) {
+        return false;
+      } finally {
+        if (gl) {
+          try {
+            const release = gl.getExtension('WEBGL_lose_context');
+            if (release) release.loseContext();
+          } catch (_) { /* Cleanup is best effort; never borrow the app's context. */ }
+        }
+        probe.width = 0; probe.height = 0;
+      }
+    }
+
     async function initMediaPipe() {
       if (location.protocol === 'file:') {
         reportPoseStatus('請透過網站開啟', '此預覽版需要 HTTP／HTTPS 網址，不能直接以 file:// 開啟。', false);
         return;
       }
       if (poseInitPromise) return poseInitPromise;
+      if (!checkPoseWebGL()) {
+        isPoseModelReady = false;
+        reportPoseStatus('此瀏覽器無法啟用 AI 骨架',
+          '目前無法建立 WebGL 圖形環境，尚未載入 AI 模型。影片仍可匯入、播放與逐格操作；不會產生骨架或角度。請在支援 WebGL 的瀏覽器開啟，或確認硬體加速後，按「重新載入 AI」再試。', true);
+        return;
+      }
       const epoch = ++poseEpoch;
       poseInitPromise = (async () => {
         reportPoseStatus('載入 AI 模型中', '正在從本站載入模型與 WebAssembly；尚未就緒，影片不會上傳。');
@@ -808,6 +928,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         handleMissedPoseFrame(curTime, frameKey);
       }
 
+      if (scrubSession && scrubFlight !== null && activePoseJob.snapshot) {
+        scrubPair = {image:activePoseJob.snapshot, landmarks:currentLandmarks ? currentLandmarks.map(p=>({...p})) : null, time:curTime,source:sourceGeneration};
+        scrubFlight = null;
+      }
       renderStage();
     }
 
@@ -822,7 +946,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (!isPoseModelReady || !pose) return;
       if (video.readyState < 2 || video.seeking || !video.videoWidth || !video.videoHeight) return;
       const stamp = frameStamp();
-      if (!stamp) { observePresentedFrame(); return; }
+      if (!stamp) { observePresentedFrame(); schedulePausedRecovery(); return; }
       let frameKey = stamp.source + ':' + stamp.seek + ':' + stamp.time.toFixed(6);
       if (isProcessingPose) { pendingPoseFrame = true; return; }
       if (frameKey === lastSentFrame) return;
@@ -840,7 +964,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         if (!activePoseJob || !sameFrame(stamp, frameStamp())) return;
         activePoseJob.time = stamp.time;
         // Freeze the entire decoded frame; never crop or stretch the inference input.
-        inferenceCtx.drawImage(video, 0, 0, inferenceCanvas.width, inferenceCanvas.height);
+        activePoseJob.snapshot = scrubSession ? captureDecodedFrame() : null;
+        inferenceCtx.drawImage(activePoseJob.snapshot || video, 0, 0, inferenceCanvas.width, inferenceCanvas.height);
         reportPoseStatus('正在辨識影格', `辨識 ${activePoseJob.time.toFixed(3)} 秒中；只顯示與目前影格一致的結果；播放中可能暫時隱藏，暫停後等待辨識。`);
         await withPoseTimeout(engine.send({ image: inferenceCanvas }), 30000, '影格辨識超過 30 秒，可能是 WebGL／模型載入失敗');
         if (epoch === poseEpoch && activePoseJob && activePoseJob.source === sourceGeneration && !activePoseJob.received) {
@@ -855,7 +980,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       } finally {
         if (engine === pose) {
           isProcessingPose = false; activePoseJob = null;
-          if (pendingPoseFrame && isPoseModelReady) { pendingPoseFrame = false; setTimeout(triggerPoseInference, 0); }
+          if (scrubSession) {
+            if (!isPoseModelReady) { leaveScrubForNativeVideo(); }
+            else pumpScrubQueue();
+          }
+          if (pendingPoseFrame && isPoseModelReady && (!scrubSession || scrubFlight !== null)) { pendingPoseFrame = false; setTimeout(triggerPoseInference, 0); }
         }
       }
     }
@@ -865,6 +994,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
        ========================================================================== */
     function handleVideoFile(file) {
       if (!file) return;
+      endScrubSession();
       ++sourceGeneration; ++playbackGeneration; isPlaying = false; invalidatePosePresentation(); lastSentFrame = null;
       const openedSource = sourceGeneration;
       sourceFrameIndex = null; frameIndexPending = true;
@@ -1037,6 +1167,17 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const ch = mainCanvas.height;
 
       mainCtx.clearRect(0, 0, cw, ch);
+      if (scrubSession && scrubPair && scrubPair.source === sourceGeneration) {
+        const bounds = getRenderBounds(mainCanvas);
+        mainCtx.fillStyle = '#020617'; mainCtx.fillRect(0,0,cw,ch);
+        mainCtx.drawImage(scrubPair.image,bounds.destX,bounds.destY,bounds.destW,bounds.destH);
+        if (showSkeleton && scrubPair.landmarks) drawSimplifiedBaseballSkeleton(mainCtx,scrubPair.landmarks,false);
+        updateTelemetryAndCounters();
+        timeCurrent.textContent = formatTime(scrubPair.time);
+        const target = scrubQueuedTarget !== null ? scrubQueuedTarget : scrubFlight;
+        if (target !== null) reportPoseStatus('拖曳同步辨識中', `畫面／骨架 ${scrubPair.time.toFixed(3)} 秒；目標 ${target.toFixed(3)} 秒。完成一格即更新，快速拖曳合併中間請求。`);
+        return;
+      }
 
       // 3. 若開啟骨架顯示且有骨架資料，繪製精簡棒球骨架與角度
       if (showSkeleton && poseMatchesFrame() && currentLandmarks && currentLandmarks.length >= 25) {
@@ -1403,7 +1544,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         scrubber.value = Math.min(100, (curTime / effectiveDuration) * 100);
       }
 
-      if (!poseMatchesFrame() || !currentLandmarks || currentLandmarks.length < 25) {
+      const telemetryLandmarks = scrubSession && scrubPair ? scrubPair.landmarks : (poseMatchesFrame() ? currentLandmarks : null);
+      if (!telemetryLandmarks || telemetryLandmarks.length < 25) {
         telTrunkTilt.textContent = '--°'; telTrunkDirection.textContent = '資料不足';
         telLeftElbow.textContent = '--°';
         telRightElbow.textContent = '--°';
@@ -1413,7 +1555,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       }
 
       // 遙測數據
-      const lm = currentLandmarks;
+      const lm = telemetryLandmarks;
       const leftElbowAngle = calculateAngle(lm[11], lm[13], lm[15]);
       const rightElbowAngle = calculateAngle(lm[12], lm[14], lm[16]);
       const leftKneeAngle = calculateAngle(lm[23], lm[25], lm[27]);
@@ -1442,6 +1584,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
        7. 播放控制與逐格操作迴圈
        ========================================================================== */
     function playVideo() {
+      endScrubSession();
       if (!video.src && !video.srcObject) return;
       if (video.currentTime >= effectiveDuration) {
         video.currentTime = 0;
@@ -1472,6 +1615,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
 
     function stepFrame(delta) {
+      endScrubSession();
       pauseVideo();
       if (!effectiveDuration || frameIndexPending) return;
       const base = timelineSeekTarget !== null ? timelineSeekTarget : video.currentTime;
@@ -1775,6 +1919,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
        ========================================================================== */
     // 輸出目前影格 PNG
     btnExportPNG.addEventListener('click', () => {
+      if (scrubSession) { alert('拖曳辨識尚在同步，請放開進度條並等目標影格完成後再匯出。'); return; }
       if (!video.videoWidth || !video.videoHeight) {
         alert("請先載入球員影片！");
         return;
@@ -1852,6 +1997,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     // 輸出骨架分析影片 (嚴格遵循瀏覽器支援，絕不將 WebM 假裝為 MP4)
     btnExportVideo.addEventListener('click', async () => {
+      if (scrubSession) { alert('請先放開進度條，等目標影格同步完成後再匯出。'); return; }
       alert('影片輸出只合成與當前影格一致的骨架。AI 趕不上播放時會省略骨架，不沿用上一格；需要完整骨架時請改用暫停後的 PNG。');
       if (!video.videoWidth || !video.videoHeight || !effectiveDuration) {
         alert("請先載入球員影片！");
@@ -2052,9 +2198,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     function finishTimelineDrag() {
       isTimelineDragging = false;
       updateTelemetryAndCounters();
+      observePresentedFrame(); schedulePausedRecovery(); pumpScrubQueue();
     }
     scrubber.addEventListener('pointerdown', (event) => {
       if (event.button !== undefined && event.button !== 0) return;
+      if (isPoseModelReady) startScrubSession();
       isTimelineDragging = true;
       if (scrubber.setPointerCapture) {
         try { scrubber.setPointerCapture(event.pointerId); } catch (_) {}
@@ -2063,18 +2211,17 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     scrubber.addEventListener('input', () => {
       const percent = Number(scrubber.value);
       if (!(effectiveDuration > 0) || !Number.isFinite(percent)) return;
-      const target = Math.max(0, Math.min(effectiveDuration, percent / 100 * effectiveDuration));
-      timelineSeekTarget = target;
-      // Keep the existing UX: scrubbing pauses, never silently restarts audio.
-      pauseVideo();
-      video.currentTime = target;
-      updateTelemetryAndCounters();
-      // A no-op seek may not emit seeked. Real seeks are handled on decoded completion.
-      if (!video.seeking && video.readyState >= 2 && Math.abs(video.currentTime - target) < 0.001) {
-        timelineSeekTarget = null;
-        triggerPoseInference();
-        renderStage();
+      const target = Math.max(0, Math.min(Math.max(0,effectiveDuration-0.000001), percent / 100 * effectiveDuration));
+      if (!isPoseModelReady) {
+        endScrubSession(); isPlaying=false; ++playbackGeneration; video.pause();
+        timelineSeekTarget=target; video.currentTime=target; renderStage(); return;
       }
+      startScrubSession();
+      timelineSeekTarget = target; scrubQueuedTarget = target;
+      // Do not seek underneath an in-flight inference. The displayed pair stays frozen together.
+      isPlaying=false; ++playbackGeneration; video.pause();
+      playIcon.textContent = '▶ 播放';
+      pumpScrubQueue(); renderStage();
     });
     video.addEventListener('seeked', () => {
       if (timelineSeekTarget !== null && !video.seeking && Math.abs(video.currentTime - timelineSeekTarget) < 0.05) {
