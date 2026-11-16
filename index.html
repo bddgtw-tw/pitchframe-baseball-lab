@@ -675,6 +675,19 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     let playbackGeneration = 0;
     let presentedFrame = null;
     let presentationCallback = null;
+    let playPair = null;
+    let playPairGeneration = 0;
+    function pairedPlaybackActive() {
+      return isPlaying && showSkeleton && isPoseModelReady && !scrubSession && !isExportingVideo;
+    }
+    function clearPlaybackPair() { ++playPairGeneration; playPair=null; }
+    function seedPlaybackPair() {
+      if (!showSkeleton || !isPoseModelReady || video.seeking || video.readyState<2 || !video.videoWidth) return;
+      const stamp=frameStamp();
+      playPair={image:captureDecodedFrame(), landmarks:poseMatchesFrame() && currentLandmarks ? currentLandmarks.map(p=>({...p})) : null,
+        time:stamp ? stamp.time : video.currentTime, position:video.currentTime,source:sourceGeneration};
+    }
+
     // Scrubbing serializes decode + inference. New thumb input only replaces the queued target.
     let scrubSession = false, scrubFlight = null, scrubQueuedTarget = null, scrubPair = null;
     function captureDecodedFrame() {
@@ -687,6 +700,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     function startScrubSession() {
       if (scrubSession) return;
       scrubSession = true;
+      if (playPair && playPair.source===sourceGeneration) {
+        scrubPair=playPair; clearPlaybackPair(); return;
+      }
+      clearPlaybackPair();
       if (video.readyState >= 2 && !video.seeking && video.videoWidth) {
         scrubPair = {image:captureDecodedFrame(), landmarks:poseMatchesFrame() && currentLandmarks ? currentLandmarks.map(p=>({...p})) : null,
           time:video.currentTime,source:sourceGeneration};
@@ -759,6 +776,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
 
     function invalidatePosePresentation() {
+      clearPlaybackPair();
       cancelPausedRecovery();
       ++seekGeneration; currentLandmarks = null; currentPoseStamp = null;
       presentedFrame = null; lastSentFrame = null;
@@ -890,7 +908,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
     retryPoseButton.addEventListener('click', async () => {
       if (poseInitPromise) return;
-      ++poseEpoch;
+      ++poseEpoch; clearPlaybackPair();
       isPoseModelReady = false; isProcessingPose = false; activePoseJob = null; lastSentFrame = null;
       const oldPose = pose; pose = null;
       if (oldPose) { try { await withPoseTimeout(oldPose.close(), 2000, 'close timeout'); } catch (_) {} }
@@ -907,7 +925,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
        ========================================================================== */
     function onPoseResults(results) {
       if (activePoseJob) activePoseJob.received = true;
-      if (!activePoseJob || !sameFrame(activePoseJob.stamp, frameStamp())) return;
+      if (!activePoseJob) return;
+      const pairedResult = activePoseJob.playPairGeneration !== undefined && pairedPlaybackActive()
+        && activePoseJob.playPairGeneration===playPairGeneration && activePoseJob.playback===playbackGeneration
+        && activePoseJob.source===sourceGeneration && activePoseJob.stamp.seek===seekGeneration;
+      if (activePoseJob.playPairGeneration !== undefined && !pairedResult) return;
+      if (!pairedResult && !sameFrame(activePoseJob.stamp, frameStamp())) return;
       currentPoseStamp = activePoseJob.stamp;
       const curTime = activePoseJob.time;
       const frameKey = Math.round(curTime * 30);
@@ -928,6 +951,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         handleMissedPoseFrame(curTime, frameKey);
       }
 
+      if (pairedResult && activePoseJob.snapshot) {
+        playPair={image:activePoseJob.snapshot, landmarks:currentLandmarks ? currentLandmarks.map(p=>({...p})) : null,
+          time:curTime,position:activePoseJob.stamp.position,source:sourceGeneration};
+      }
       if (scrubSession && scrubFlight !== null && activePoseJob.snapshot) {
         scrubPair = {image:activePoseJob.snapshot, landmarks:currentLandmarks ? currentLandmarks.map(p=>({...p})) : null, time:curTime,source:sourceGeneration};
         scrubFlight = null;
@@ -953,6 +980,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const engine = pose, epoch = poseEpoch;
       isProcessingPose = true; pendingPoseFrame = false;
       activePoseJob = { time: stamp.time, source: sourceGeneration, stamp };
+      if (pairedPlaybackActive()) { activePoseJob.playPairGeneration=playPairGeneration; activePoseJob.playback=playbackGeneration; }
       const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight));
       inferenceCanvas.width = Math.max(1, Math.round(video.videoWidth * scale));
       inferenceCanvas.height = Math.max(1, Math.round(video.videoHeight * scale));
@@ -964,9 +992,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         if (!activePoseJob || !sameFrame(stamp, frameStamp())) return;
         activePoseJob.time = stamp.time;
         // Freeze the entire decoded frame; never crop or stretch the inference input.
-        activePoseJob.snapshot = scrubSession ? captureDecodedFrame() : null;
+        activePoseJob.snapshot = (scrubSession || activePoseJob.playPairGeneration !== undefined) ? captureDecodedFrame() : null;
         inferenceCtx.drawImage(activePoseJob.snapshot || video, 0, 0, inferenceCanvas.width, inferenceCanvas.height);
-        reportPoseStatus('正在辨識影格', `辨識 ${activePoseJob.time.toFixed(3)} 秒中；只顯示與目前影格一致的結果；播放中可能暫時隱藏，暫停後等待辨識。`);
+        reportPoseStatus('正在辨識影格', `辨識 ${activePoseJob.time.toFixed(3)} 秒中；只顯示與目前影格一致的結果；骨架播放以已完成的畫面與骨架成對更新，可能略過中間影格；原音訊不變。`);
         await withPoseTimeout(engine.send({ image: inferenceCanvas }), 30000, '影格辨識超過 30 秒，可能是 WebGL／模型載入失敗');
         if (epoch === poseEpoch && activePoseJob && activePoseJob.source === sourceGeneration && !activePoseJob.received) {
           throw new Error('AI 執行完成但未回傳結果，請重新載入模型');
@@ -974,7 +1002,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         if (epoch === poseEpoch && activePoseJob && activePoseJob.source === sourceGeneration) lastSentFrame = frameKey;
       } catch (err) {
         if (epoch !== poseEpoch) return;
-        ++poseEpoch; isPoseModelReady = false;
+        ++poseEpoch; isPoseModelReady = false; clearPlaybackPair();
         currentLandmarks = null; renderStage();
         reportPoseStatus('AI 影格辨識失敗', String(err.message || err) + '。影片仍可播放；可按「重新載入 AI」。', true);
       } finally {
@@ -1179,6 +1207,16 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         return;
       }
 
+      if (pairedPlaybackActive() && playPair && playPair.source===sourceGeneration) {
+        const bounds=getRenderBounds(mainCanvas);
+        mainCtx.fillStyle='#020617'; mainCtx.fillRect(0,0,cw,ch);
+        mainCtx.drawImage(playPair.image,bounds.destX,bounds.destY,bounds.destW,bounds.destH);
+        if (playPair.landmarks) drawSimplifiedBaseballSkeleton(mainCtx,playPair.landmarks,false);
+        updateTelemetryAndCounters();
+        reportPoseStatus(playPair.landmarks ? '骨架配對播放中' : '配對影格未顯示骨架',
+          `顯示 ${playPair.time.toFixed(3)} 秒；畫面與骨架一起更新。AI 較慢時略過中間影格，原音訊仍照常播放，可能領先畫面。`);
+        return;
+      }
       // 3. 若開啟骨架顯示且有骨架資料，繪製精簡棒球骨架與角度
       if (showSkeleton && poseMatchesFrame() && currentLandmarks && currentLandmarks.length >= 25) {
         drawSimplifiedBaseballSkeleton(mainCtx, currentLandmarks, isCurrentLandmarkEstimated);
@@ -1535,7 +1573,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     /* 更新遙測欄與播放格數計數器 */
     function updateTelemetryAndCounters() {
-      const curTime = timelineSeekTarget !== null ? timelineSeekTarget : (video.currentTime || 0);
+      const visiblePlayPair = pairedPlaybackActive() ? playPair : null;
+      const curTime = timelineSeekTarget !== null ? timelineSeekTarget : (visiblePlayPair ? visiblePlayPair.time : (video.currentTime || 0));
       const curFrame = sourceFrameIndex ? sourceFrameIndex.frameAt(curTime) : -1;
       timeFrameBadge.textContent = `${formatTime(curTime)}${curFrame >= 0 ? `（第 ${curFrame + 1} 格）` : ''}`;
       timeCurrent.textContent = formatTime(curTime);
@@ -1544,7 +1583,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         scrubber.value = Math.min(100, (curTime / effectiveDuration) * 100);
       }
 
-      const telemetryLandmarks = scrubSession && scrubPair ? scrubPair.landmarks : (poseMatchesFrame() ? currentLandmarks : null);
+      const telemetryLandmarks = scrubSession && scrubPair ? scrubPair.landmarks : (visiblePlayPair ? visiblePlayPair.landmarks : (poseMatchesFrame() ? currentLandmarks : null));
       if (!telemetryLandmarks || telemetryLandmarks.length < 25) {
         telTrunkTilt.textContent = '--°'; telTrunkDirection.textContent = '資料不足';
         telLeftElbow.textContent = '--°';
@@ -1589,6 +1628,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (video.currentTime >= effectiveDuration) {
         video.currentTime = 0;
       }
+      clearPlaybackPair(); seedPlaybackPair();
       const playbackToken = ++playbackGeneration;
       const playbackSource = sourceGeneration;
       video.play().then(() => {
@@ -1603,22 +1643,30 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       });
     }
 
-    function pauseVideo() {
+    function pauseVideo(settleEnd=false, preservePair=true) {
+      const displayed = preservePair && pairedPlaybackActive() ? playPair : null;
+      clearPlaybackPair();
       ++playbackGeneration;
       isPlaying = false;
       video.pause();
       playIcon.textContent = "▶ 播放";
       btnPlayPause.classList.replace('bg-amber-400', 'bg-lime-400');
       btnPlayPause.classList.replace('hover:bg-amber-300', 'hover:bg-lime-300');
-      triggerPoseInference();
+      if (displayed && isPoseModelReady) {
+        scrubSession=true; scrubPair=displayed; scrubFlight=null;
+        const target=settleEnd ? Math.max(0,effectiveDuration-0.000001) : displayed.position;
+        scrubQueuedTarget=target; timelineSeekTarget=target;
+        pumpScrubQueue();
+      } else triggerPoseInference();
       renderStage();
     }
 
     function stepFrame(delta) {
+      const displayedBase = pairedPlaybackActive() && playPair ? playPair.position : null;
       endScrubSession();
-      pauseVideo();
+      pauseVideo(false,false);
       if (!effectiveDuration || frameIndexPending) return;
-      const base = timelineSeekTarget !== null ? timelineSeekTarget : video.currentTime;
+      const base = timelineSeekTarget !== null ? timelineSeekTarget : (displayedBase !== null ? displayedBase : video.currentTime);
       let targetTime;
       if (sourceFrameIndex) {
         const step = sourceFrameIndex.step(base, delta);
@@ -1650,7 +1698,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         if (isLooping) {
           video.currentTime = 0;
         } else {
-          pauseVideo();
+          pauseVideo(true);
           return;
         }
       }
@@ -1919,12 +1967,17 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
        ========================================================================== */
     // 輸出目前影格 PNG
     btnExportPNG.addEventListener('click', () => {
+      if (pairedPlaybackActive() && playPair) {
+        pauseVideo();
+        alert('已停在畫面所示影格；請等骨架同步後再匯出 PNG。');
+        return;
+      }
       if (scrubSession) { alert('拖曳辨識尚在同步，請放開進度條並等目標影格完成後再匯出。'); return; }
       if (!video.videoWidth || !video.videoHeight) {
         alert("請先載入球員影片！");
         return;
       }
-      pauseVideo();
+      pauseVideo(false,false);
 
       if (video.seeking || video.readyState < 2) {
         alert('影片仍在跳轉，請等畫面穩定後再匯出。'); return;
@@ -2029,7 +2082,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       isExportingVideo = true;
       exportCancelled = false;
 
-      pauseVideo();
+      pauseVideo(false,false);
       video.currentTime = 0;
       await new Promise(r => setTimeout(r, 200));
 
@@ -2075,7 +2128,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
         isExportingVideo = false;
         exportModal.classList.add('hidden');
-        pauseVideo();
+        pauseVideo(false,false);
       };
 
       mediaRecorder.start();
@@ -2119,7 +2172,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       exportCancelled = true;
       isExportingVideo = false;
       exportModal.classList.add('hidden');
-      pauseVideo();
+      pauseVideo(false,false);
     });
 
     /* ==========================================================================
@@ -2254,7 +2307,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     // 骨架顯示開關
     btnToggleSkeleton.addEventListener('click', () => {
+      clearPlaybackPair();
       showSkeleton = !showSkeleton;
+      if (showSkeleton && isPlaying) seedPlaybackPair();
       skeletonToggleText.textContent = showSkeleton ? "隱藏骨架" : "顯示骨架";
       btnToggleSkeleton.classList.toggle('bg-lime-400/20', showSkeleton);
       btnToggleSkeleton.classList.toggle('text-lime-300', showSkeleton);
