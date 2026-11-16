@@ -293,6 +293,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       <!-- Annotation Canvas (user drawing lines, arrows, circles, notes) -->
       <canvas id="drawCanvas" class="absolute inset-0 w-full h-full object-contain z-20 pointer-events-none"></canvas>
 
+      <canvas id="targetCanvas" aria-label="指定球員範圍" style="position:absolute;inset:0;width:100%;height:100%;z-index:25;pointer-events:none;touch-action:none"></canvas>
       <!-- Initial Empty State -->
       <div id="emptyPrompt" class="absolute inset-0 z-30 flex flex-col items-center justify-center p-6 text-center bg-slate-950/80 cursor-pointer">
         <div class="w-16 h-16 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center text-3xl mb-3 text-lime-400 shadow-inner">
@@ -386,6 +387,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       </div>
     </div>
 
+        <div style="padding:8px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button id="btnSelectTarget" style="min-height:44px;padding:8px 12px;border:1px solid #64748b;border-radius:8px;background:#1e293b;color:#f8fafc">指定分析球員</button>
+          <button id="btnClearTarget" disabled style="min-height:44px;padding:8px 12px;border:1px solid #64748b;border-radius:8px;background:#1e293b;color:#f8fafc">解除範圍</button>
+          <span id="targetStatus" role="status" style="font-size:12px;color:#cbd5e1">未指定：AI 分析全畫面。可暫停後框住一位球員全身。</span>
+          <small style="flex-basis:100%;color:#94a3b8">固定範圍只限制 AI 輸入，原影片與匯出均不裁切。請含頭、手、腳及動作餘裕；人物離框請重畫。框內多人重疊不能保證選中同一人，這不是身分追蹤。</small>
+        </div>
         <details id="annotationSection">
           <summary>標註工具<span>畫線、文字與復原</span></summary>
     <!-- Drawing & Annotation Toolbar (Accessible when paused) -->
@@ -641,6 +648,103 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     let poseInitPromise = null, poseEpoch = 0, sourceGeneration = 0;
     let activePoseJob = null, pendingPoseFrame = false, lastSentFrame = null;
     let modelSourceGeneration = -1;
+    const targetCanvas=document.getElementById('targetCanvas');
+    const targetCtx=targetCanvas.getContext('2d');
+    const targetStatus=document.getElementById('targetStatus');
+    const btnSelectTarget=document.getElementById('btnSelectTarget');
+    const btnClearTarget=document.getElementById('btnClearTarget');
+    let targetRegion=null, targetGeneration=0, targetSelecting=false, targetStart=null, targetDraft=null;
+    let targetSelectionRequest=0, savedAnnotationTool=null, targetTorso=null;
+    let targetNeedsRedraw=false;
+    function normalizeTarget(a,b) {
+      if (![a.x,a.y,b.x,b.y].every(Number.isFinite)) return null;
+      const x=Math.max(0,Math.min(1,Math.min(a.x,b.x))), y=Math.max(0,Math.min(1,Math.min(a.y,b.y)));
+      const right=Math.max(0,Math.min(1,Math.max(a.x,b.x))), bottom=Math.max(0,Math.min(1,Math.max(a.y,b.y)));
+      return right-x>=0.02 && bottom-y>=0.04 ? {x,y,width:right-x,height:bottom-y} : null;
+    }
+    function remapTargetLandmarks(points,region) {
+      if (!region) return points;
+      return points.map(p=>({...p,x:region.x+p.x*region.width,y:region.y+p.y*region.height,
+        z:Number.isFinite(p.z)?p.z*region.width:p.z}));
+    }
+    function validateTargetPose(points, mediaTime=video.currentTime, seek=seekGeneration) {
+      if (targetNeedsRedraw || !points || points.length<29) return false;
+      const good=p=>p && Number.isFinite(p.x) && Number.isFinite(p.y) && p.x>.04 && p.x<.96 && p.y>.04 && p.y<.96
+        && Number.isFinite(p.visibility) && p.visibility>=.65
+        && (p.presence===undefined || p.presence>=.65);
+      // Conservative full-body lock: clipped/uncertain torso or legs never trigger full-frame fallback.
+      if (![11,12,23,24,25,26,27,28].every(i=>good(points[i]))) return false;
+      const torso=[11,12,23,24].map(i=>points[i]);
+      const center={x:torso.reduce((v,p)=>v+p.x,0)/4,y:torso.reduce((v,p)=>v+p.y,0)/4};
+      if(center.x<.2 || center.x>.8 || center.y<.15 || center.y>.8) return false;
+      const dt=targetTorso?mediaTime-targetTorso.time:NaN;
+      // Continuity is only meaningful across nearby forward samples without a seek.
+      // Backward/nonadjacent scrubs are not evidence of a different person.
+      if(targetTorso && targetTorso.seek===seek && dt>0 && dt<=.25
+        && Math.hypot(center.x-targetTorso.x,center.y-targetTorso.y)>.22) return false;
+      targetTorso={...center,time:mediaTime,seek}; return true;
+    }
+    function renderTargetRegion() {
+      if(targetCanvas.width!==mainCanvas.width || targetCanvas.height!==mainCanvas.height) {
+        targetCanvas.width=mainCanvas.width;targetCanvas.height=mainCanvas.height;
+      }
+      targetCtx.clearRect(0,0,targetCanvas.width,targetCanvas.height);
+      const r=targetDraft || targetRegion;if(!r)return;
+      const a=mapVideoToCanvas(r.x,r.y,targetCanvas), b=mapVideoToCanvas(r.x+r.width,r.y+r.height,targetCanvas);
+      targetCtx.strokeStyle=targetNeedsRedraw?'#fb7185':'#38bdf8';targetCtx.lineWidth=2;
+      targetCtx.setLineDash([6,4]);targetCtx.strokeRect(a.x,a.y,b.x-a.x,b.y-a.y);targetCtx.setLineDash([]);
+    }
+    function cancelTargetSelection() {
+      ++targetSelectionRequest;targetSelecting=false;targetStart=null;targetDraft=null;
+      targetCanvas.style.pointerEvents='none';
+      if(savedAnnotationTool!==null){activeTool=savedAnnotationTool;savedAnnotationTool=null;}
+      drawCanvas.style.pointerEvents=activeTool?'auto':'none';
+      stageContainer.classList.toggle('touch-draw-active',!!activeTool);
+      btnSelectTarget.textContent=targetRegion?'重畫分析範圍':'指定分析球員';renderTargetRegion();
+    }
+    function setTargetRegion(region) {
+      cancelTargetSelection();targetRegion=region;++targetGeneration;targetTorso=null;targetNeedsRedraw=false;
+      endScrubSession();invalidatePosePresentation();poseCache.clear();lastValidLandmarks=null;
+      modelSourceGeneration=-1; // reset smoothing before next input coordinate space
+      btnClearTarget.disabled=!region;
+      btnSelectTarget.textContent=region?'重畫分析範圍':'指定分析球員';
+      targetStatus.textContent=region?'已指定固定範圍：僅分析框內；移出／遮擋後請重畫。':'未指定：AI 分析全畫面。';
+      renderTargetRegion();observePresentedFrame();schedulePausedRecovery();triggerPoseInference();
+    }
+    btnSelectTarget.addEventListener('click',async()=>{
+      if(isExportingVideo)return;
+      if(targetSelecting){cancelTargetSelection();return;}
+      if(!video.videoWidth){targetStatus.textContent='請先匯入影片。';return;}
+      if(isPlaying)pauseVideo();
+      const request=++targetSelectionRequest,source=sourceGeneration;
+      targetStatus.textContent='等待暫停畫面同步後框選…';
+      for(let n=0;n<80 && (video.seeking||scrubSession||!video.paused);n++)await new Promise(r=>setTimeout(r,100));
+      if(request!==targetSelectionRequest||source!==sourceGeneration)return;
+      if(video.seeking||scrubSession||!video.paused||video.readyState<2){targetStatus.textContent='畫面仍同步中，請稍候再按指定分析球員。';return;}
+      targetSelecting=true;savedAnnotationTool=activeTool;activeTool=null;isDrawing=false;
+      drawCanvas.style.pointerEvents='none';targetCanvas.style.pointerEvents='auto';stageContainer.classList.add('touch-draw-active');
+      btnSelectTarget.textContent='取消框選';targetStatus.textContent='拖曳框住一位球員全身與動作空間；不要把背景球員一起框入。';
+    });
+    btnClearTarget.addEventListener('click',()=>{if(!isExportingVideo){pauseVideo(false,false);setTargetRegion(null);}});
+    function targetPointer(e) {
+      const r=targetCanvas.getBoundingClientRect();
+      const x=(e.clientX-r.left)*targetCanvas.width/r.width,y=(e.clientY-r.top)*targetCanvas.height/r.height;
+      const b=getRenderBounds(targetCanvas);
+      return {x:Math.max(0,Math.min(1,(x-b.destX)/b.destW)),y:Math.max(0,Math.min(1,(y-b.destY)/b.destH))};
+    }
+    targetCanvas.addEventListener('pointerdown',e=>{
+      if(!targetSelecting || (e.button!==undefined&&e.button!==0))return;
+      targetStart=targetPointer(e);targetDraft=null;if(targetCanvas.setPointerCapture)targetCanvas.setPointerCapture(e.pointerId);
+    });
+    targetCanvas.addEventListener('pointermove',e=>{if(targetSelecting&&targetStart){targetDraft=normalizeTarget(targetStart,targetPointer(e));renderTargetRegion();}});
+    targetCanvas.addEventListener('pointerup',e=>{
+      if(!targetSelecting||!targetStart)return;
+      const region=normalizeTarget(targetStart,targetPointer(e));targetStart=null;
+      if(!region){targetDraft=null;targetStatus.textContent='範圍太小；請重新框住全身。';renderTargetRegion();return;}
+      setTargetRegion(region);
+    });
+    targetCanvas.addEventListener('pointercancel',()=>cancelTargetSelection());
+
     const inferenceCanvas = document.createElement('canvas');
     const inferenceCtx = inferenceCanvas.getContext('2d');
     const poseDetail = document.getElementById('poseDetail');
@@ -925,7 +1029,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
        ========================================================================== */
     function onPoseResults(results) {
       if (activePoseJob) activePoseJob.received = true;
-      if (!activePoseJob) return;
+      if (!activePoseJob || activePoseJob.targetGeneration!==targetGeneration) return;
       const pairedResult = activePoseJob.playPairGeneration !== undefined && pairedPlaybackActive()
         && activePoseJob.playPairGeneration===playPairGeneration && activePoseJob.playback===playbackGeneration
         && activePoseJob.source===sourceGeneration && activePoseJob.stamp.seek===seekGeneration;
@@ -935,6 +1039,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const curTime = activePoseJob.time;
       const frameKey = Math.round(curTime * 30);
 
+      if(activePoseJob.region) {
+        if(!validateTargetPose(results.poseLandmarks,activePoseJob.time,activePoseJob.stamp.seek)) {
+          targetNeedsRedraw=true;
+          targetStatus.textContent='指定範圍內沒有可信的完整球員，或位置突變；已停用骨架，請重畫範圍。沒有切換回全畫面。';
+          results={...results,poseLandmarks:[]};renderTargetRegion();
+        } else results={...results,poseLandmarks:remapTargetLandmarks(results.poseLandmarks,activePoseJob.region)};
+      }
       if (results.poseLandmarks && results.poseLandmarks.length >= 25) {
         // 成功辨識出人體
         hasEverDetectedRealPerson = true;
@@ -979,21 +1090,26 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (frameKey === lastSentFrame) return;
       const engine = pose, epoch = poseEpoch;
       isProcessingPose = true; pendingPoseFrame = false;
-      activePoseJob = { time: stamp.time, source: sourceGeneration, stamp };
+      activePoseJob = { time: stamp.time, source: sourceGeneration, stamp, targetGeneration, region:targetRegion?{...targetRegion}:null };
       if (pairedPlaybackActive()) { activePoseJob.playPairGeneration=playPairGeneration; activePoseJob.playback=playbackGeneration; }
-      const scale = Math.min(1, 960 / Math.max(video.videoWidth, video.videoHeight));
-      inferenceCanvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-      inferenceCanvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+      const inputWidth=video.videoWidth*(targetRegion?targetRegion.width:1), inputHeight=video.videoHeight*(targetRegion?targetRegion.height:1);
+      const scale = Math.min(1, 960 / Math.max(inputWidth,inputHeight));
+      inferenceCanvas.width = Math.max(1, Math.round(inputWidth * scale));
+      inferenceCanvas.height = Math.max(1, Math.round(inputHeight * scale));
       try {
         if (modelSourceGeneration !== sourceGeneration) {
           await withPoseTimeout(Promise.resolve(engine.reset()), 10000, '模型重設逾時');
           modelSourceGeneration = sourceGeneration;
         }
-        if (!activePoseJob || !sameFrame(stamp, frameStamp())) return;
+        if (!activePoseJob || activePoseJob.targetGeneration!==targetGeneration || !sameFrame(stamp, frameStamp())) return;
         activePoseJob.time = stamp.time;
-        // Freeze the entire decoded frame; never crop or stretch the inference input.
+        // Preserve the complete decoded display snapshot. Only an explicit target region crops the inference input.
         activePoseJob.snapshot = (scrubSession || activePoseJob.playPairGeneration !== undefined) ? captureDecodedFrame() : null;
-        inferenceCtx.drawImage(activePoseJob.snapshot || video, 0, 0, inferenceCanvas.width, inferenceCanvas.height);
+        const input=activePoseJob.snapshot||video, region=activePoseJob.region;
+        if(region){
+          const w=activePoseJob.snapshot?input.width:video.videoWidth,h=activePoseJob.snapshot?input.height:video.videoHeight;
+          inferenceCtx.drawImage(input,region.x*w,region.y*h,region.width*w,region.height*h,0,0,inferenceCanvas.width,inferenceCanvas.height);
+        }else inferenceCtx.drawImage(input,0,0,inferenceCanvas.width,inferenceCanvas.height);
         reportPoseStatus('正在辨識影格', `辨識 ${activePoseJob.time.toFixed(3)} 秒中；只顯示與目前影格一致的結果；骨架播放以已完成的畫面與骨架成對更新，可能略過中間影格；原音訊不變。`);
         await withPoseTimeout(engine.send({ image: inferenceCanvas }), 30000, '影格辨識超過 30 秒，可能是 WebGL／模型載入失敗');
         if (epoch === poseEpoch && activePoseJob && activePoseJob.source === sourceGeneration && !activePoseJob.received) {
@@ -1022,6 +1138,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
        ========================================================================== */
     function handleVideoFile(file) {
       if (!file) return;
+      cancelTargetSelection();targetRegion=null;++targetGeneration;targetTorso=null;targetNeedsRedraw=false;
+      btnClearTarget.disabled=true;btnSelectTarget.textContent='指定分析球員';targetStatus.textContent='新影片：分析範圍已重設。';renderTargetRegion();
       endScrubSession();
       ++sourceGeneration; ++playbackGeneration; isPlaying = false; invalidatePosePresentation(); lastSentFrame = null;
       const openedSource = sourceGeneration;
@@ -1111,7 +1229,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         drawCanvas.height = h;
       }
       renderStage();
-      renderAnnotations();
+      renderAnnotations();renderTargetRegion();
     }
 
     window.addEventListener('resize', resizeCanvases);
@@ -1623,6 +1741,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
        7. 播放控制與逐格操作迴圈
        ========================================================================== */
     function playVideo() {
+      if(targetSelecting)cancelTargetSelection();
       endScrubSession();
       if (!video.src && !video.srcObject) return;
       if (video.currentTime >= effectiveDuration) {
@@ -1662,6 +1781,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
 
     function stepFrame(delta) {
+      if(targetSelecting)cancelTargetSelection();
       const displayedBase = pairedPlaybackActive() && playPair ? playPair.position : null;
       endScrubSession();
       pauseVideo(false,false);
@@ -1810,6 +1930,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     // 標註事件綁定
     toolButtons.forEach(btn => {
       btn.addEventListener('click', () => {
+        if(targetSelecting)return;
         pauseVideo(); // 進入標註自動暫停
         const tool = btn.dataset.tool;
 
@@ -1967,6 +2088,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
        ========================================================================== */
     // 輸出目前影格 PNG
     btnExportPNG.addEventListener('click', () => {
+      if(targetSelecting){alert('請先完成或取消球員框選。');return;}
       if (pairedPlaybackActive() && playPair) {
         pauseVideo();
         alert('已停在畫面所示影格；請等骨架同步後再匯出 PNG。');
@@ -2050,6 +2172,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     // 輸出骨架分析影片 (嚴格遵循瀏覽器支援，絕不將 WebM 假裝為 MP4)
     btnExportVideo.addEventListener('click', async () => {
+      if(targetSelecting){alert('請先完成或取消球員框選。');return;}
       if (scrubSession) { alert('請先放開進度條，等目標影格同步完成後再匯出。'); return; }
       alert('影片輸出只合成與當前影格一致的骨架。AI 趕不上播放時會省略骨架，不沿用上一格；需要完整骨架時請改用暫停後的 PNG。');
       if (!video.videoWidth || !video.videoHeight || !effectiveDuration) {
@@ -2321,6 +2444,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     // 鍵盤快速鍵
     window.addEventListener('keydown', (e) => {
+      if(targetSelecting){if(e.code==='Escape')cancelTargetSelection();return;}
       if (e.target.tagName === 'INPUT') return;
       if (e.code === 'Space') {
         e.preventDefault();
