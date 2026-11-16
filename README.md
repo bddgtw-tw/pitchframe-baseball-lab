@@ -1,5 +1,7 @@
 # 投球逐格｜PitchFrame
 
+[▶ 直接試用 PitchFrame](https://bddgtw-tw.github.io/pitchframe-baseball-lab/)
+
 A separate public preview for a browser-based baseball motion observer.
 Repository/project slug: `pitchframe-baseball-lab`.
 
