@@ -383,6 +383,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
             <span>🦴</span>
             <span id="skeletonToggleText">隱藏骨架</span>
           </button>
+          <button id="btnToggleAngles" class="bg-lime-400/20 text-lime-300 border border-lime-400/30 text-xs font-semibold px-3 py-2 rounded-lg transition active:scale-95 flex items-center gap-1">
+            <span>📐</span>
+            <span id="anglesToggleText">隱藏角度</span>
+          </button>
         </div>
       </div>
     </div>
@@ -589,6 +593,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const speedButtons = document.querySelectorAll('.speed-btn');
     const btnToggleSkeleton = document.getElementById('btnToggleSkeleton');
     const skeletonToggleText = document.getElementById('skeletonToggleText');
+    const btnToggleAngles = document.getElementById('btnToggleAngles');
+    const anglesToggleText = document.getElementById('anglesToggleText');
     const durationWarning = document.getElementById('durationWarning');
     const durationWarningText = document.getElementById('durationWarningText');
     const btnCloseWarning = document.getElementById('btnCloseWarning');
@@ -640,6 +646,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     let isTimelineDragging = false;
     let timelineSeekTarget = null;
     let showSkeleton = true;
+    let showAngleBadges = true;
 
     // MediaPipe & Detection State
     let pose = null;
@@ -961,6 +968,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     let exportAbortController = null;
     let exportOriginalMuted = false;
     let exportPoseResolver = null;
+    let smoothedCalloutBox = null;
 
     /* ==========================================================================
        1. 初始化 MediaPipe Pose 模型
@@ -1175,6 +1183,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       
       // 重置狀態
       poseCache.clear();
+      smoothedCalloutBox = null;
       hasEverDetectedRealPerson = false;
       lastValidLandmarks = null;
       currentLandmarks = null;
@@ -1449,14 +1458,18 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const leftHeel = p(29), rightHeel = p(30);
       const leftToe = p(31), rightToe = p(32);
 
-      // 骨盆中心與肩膀中心
+      // 骨盆中心（重心）與肩膀中心；若側身僅單側髖可信，採用單髖推估並以虛線區分
       let midShoulder = null;
       if (leftShoulder && rightShoulder) {
         midShoulder = { x: (leftShoulder.x + rightShoulder.x) / 2, y: (leftShoulder.y + rightShoulder.y) / 2 };
       }
       let pelvisCenter = null;
+      let pelvisEstimated = false;
       if (leftHip && rightHip) {
         pelvisCenter = { x: (leftHip.x + rightHip.x) / 2, y: (leftHip.y + rightHip.y) / 2 };
+      } else if (leftHip || rightHip) {
+        pelvisCenter = leftHip || rightHip;
+        pelvisEstimated = true;
       }
 
       // Schematic head position from two reliable ears. No nose/shoulder extrapolation.
@@ -1602,7 +1615,59 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       drawJointNode(rightElbow, '#fb923c');
       drawJointNode(rightWrist, '#fb923c');
 
-      drawJointNode(pelvisCenter, '#38bdf8', 6.5); // 骨盆中心重點顯示
+      // 身體重心（骨盆中心）十字準心 + 地面落點（不畫垂直連線，保持畫面乾淨）
+      if (pelvisCenter) {
+        const cogColor = (isEstimated || pelvisEstimated) ? '#fbbf24' : '#facc15';
+        const footPoints = [leftAnkle, rightAnkle, leftHeel, rightHeel, leftToe, rightToe].filter(Boolean);
+        const groundY = footPoints.length ? Math.max(...footPoints.map(pt => pt.y)) : null;
+
+        ctx.save();
+        // 1. 若有腳部接地點，僅在地面繪製落點與水平短線
+        if (groundY !== null && groundY > pelvisCenter.y + 10) {
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          ctx.moveTo(pelvisCenter.x - 16, groundY);
+          ctx.lineTo(pelvisCenter.x + 16, groundY);
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.75)';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+
+          // 地面落點圓點
+          ctx.beginPath();
+          ctx.arc(pelvisCenter.x, groundY, 6, 0, Math.PI * 2);
+          ctx.fillStyle = cogColor;
+          ctx.fill();
+          ctx.strokeStyle = '#0f172a';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+
+        // 2. 重心十字準心圓環
+        ctx.beginPath();
+        ctx.setLineDash(pelvisEstimated ? [3, 3] : []);
+        ctx.arc(pelvisCenter.x, pelvisCenter.y, 10, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(250, 204, 21, 0.22)';
+        ctx.fill();
+        ctx.strokeStyle = cogColor;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(pelvisCenter.x - 13, pelvisCenter.y);
+        ctx.lineTo(pelvisCenter.x + 13, pelvisCenter.y);
+        ctx.moveTo(pelvisCenter.x, pelvisCenter.y - 13);
+        ctx.lineTo(pelvisCenter.x, pelvisCenter.y + 13);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        ctx.beginPath();
+        ctx.arc(pelvisCenter.x, pelvisCenter.y, 4, 0, Math.PI * 2);
+        ctx.fillStyle = cogColor;
+        ctx.fill();
+        ctx.restore();
+      }
       drawJointNode(leftHip, '#34d399');
       drawJointNode(leftKnee, '#34d399');
       drawJointNode(leftAnkle, '#34d399');
@@ -1626,63 +1691,145 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         trunkTiltAngle = Math.round(rad * 180 / Math.PI);
       }
 
-      // I. 畫面動態角度標記（向人體外側智慧排版，絕不堆疊遮擋身體）
+      // I. 穩定四周固定區角度標記（以平滑包圍盒與死區鎖定標籤位置，不隨關節微震跳動，並以「斜-平」引線連接）
+      const bodyPts = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]
+        .map(idx => lm[idx])
+        .filter(pt => credibleBodyPoint(pt));
+
+      if (bodyPts.length >= 2) {
+        let rawMinX = 1, rawMaxX = 0, rawMinY = 1, rawMaxY = 0;
+        for (const pt of bodyPts) {
+          rawMinX = Math.min(rawMinX, pt.x);
+          rawMaxX = Math.max(rawMaxX, pt.x);
+          rawMinY = Math.min(rawMinY, pt.y);
+          rawMaxY = Math.max(rawMaxY, pt.y);
+        }
+        if (!smoothedCalloutBox) {
+          smoothedCalloutBox = { minX: rawMinX, maxX: rawMaxX, minY: rawMinY, maxY: rawMaxY };
+        } else {
+          // 平滑跟隨球員姿勢移動（濾除單幀微震，同時自然跟著跨步、下蹲與轉體滑動）
+          const alpha = isPlaying ? 0.22 : 0.35;
+          const lerp = (cur, target) => cur + (target - cur) * alpha;
+          smoothedCalloutBox.minX = lerp(smoothedCalloutBox.minX, rawMinX);
+          smoothedCalloutBox.maxX = lerp(smoothedCalloutBox.maxX, rawMaxX);
+          smoothedCalloutBox.minY = lerp(smoothedCalloutBox.minY, rawMinY);
+          smoothedCalloutBox.maxY = lerp(smoothedCalloutBox.maxY, rawMaxY);
+        }
+      }
+
       const badges = [];
-      const midBodyX = midShoulder ? midShoulder.x : ctx.canvas.width / 2;
+      if (smoothedCalloutBox) {
+        const tl = mapVideoToCanvas(smoothedCalloutBox.minX, smoothedCalloutBox.minY, ctx.canvas);
+        const br = mapVideoToCanvas(smoothedCalloutBox.maxX, smoothedCalloutBox.maxY, ctx.canvas);
+        const perim = {
+          left: tl.x,
+          right: br.x,
+          top: tl.y,
+          bottom: br.y,
+          w: Math.max(40, br.x - tl.x),
+          h: Math.max(80, br.y - tl.y),
+          cx: (tl.x + br.x) / 2
+        };
+        const marginX = Math.max(26, Math.round(perim.w * 0.16));
 
-      if (leftElbowAngle !== null && leftElbow) {
-        badges.push({
-          anchor: leftElbow,
-          text: `左肘 ${leftElbowAngle}°`,
-          preferredSide: leftElbow.x < midBodyX ? 'left' : 'right',
-          color: '#60a5fa'
-        });
-      }
-      if (rightElbowAngle !== null && rightElbow) {
-        badges.push({
-          anchor: rightElbow,
-          text: `右肘 ${rightElbowAngle}°`,
-          preferredSide: rightElbow.x < midBodyX ? 'left' : 'right',
-          color: '#fb923c'
-        });
-      }
-      if (leftKneeAngle !== null && leftKnee) {
-        badges.push({
-          anchor: leftKnee,
-          text: `左膝 ${leftKneeAngle}°`,
-          preferredSide: leftKnee.x < midBodyX ? 'left' : 'right',
-          color: '#34d399'
-        });
-      }
-      if (rightKneeAngle !== null && rightKnee) {
-        badges.push({
-          anchor: rightKnee,
-          text: `右膝 ${rightKneeAngle}°`,
-          preferredSide: rightKnee.x < midBodyX ? 'left' : 'right',
-          color: '#c084fc'
-        });
-      }
-      if (trunkTiltAngle !== null && midShoulder) {
-        // 軀幹傾角標籤完全與頭部辨識解耦：以肩中點為錨點並依軀幹長度向上留白，避免遮擋臉部或胸口
-        const torsoPx = pelvisCenter ? Math.hypot(midShoulder.x - pelvisCenter.x, midShoulder.y - pelvisCenter.y) : 80;
-        badges.push({
-          anchor: midShoulder,
-          text: `軀幹傾角 ${Math.abs(trunkTiltAngle)}°`,
-          preferredSide: 'top',
-          topOffset: Math.max(36, Math.round(torsoPx * 0.55)),
-          color: '#facc15'
-        });
+        // 依關節在畫面上的實際左右位置配對外側槽位，徹底避免引線交叉穿越身體
+        let leftElbowSlot = 'right';
+        let rightElbowSlot = 'left';
+        if (leftElbow && rightElbow) {
+          if (leftElbow.x <= rightElbow.x) {
+            leftElbowSlot = 'left';
+            rightElbowSlot = 'right';
+          } else {
+            leftElbowSlot = 'right';
+            rightElbowSlot = 'left';
+          }
+        } else if (leftElbow) {
+          leftElbowSlot = leftElbow.x < perim.cx ? 'left' : 'right';
+        } else if (rightElbow) {
+          rightElbowSlot = rightElbow.x < perim.cx ? 'left' : 'right';
+        }
+
+        let leftKneeSlot = 'right';
+        let rightKneeSlot = 'left';
+        if (leftKnee && rightKnee) {
+          if (leftKnee.x <= rightKnee.x) {
+            leftKneeSlot = 'left';
+            rightKneeSlot = 'right';
+          } else {
+            leftKneeSlot = 'right';
+            rightKneeSlot = 'left';
+          }
+        } else if (leftKnee) {
+          leftKneeSlot = leftKnee.x < perim.cx ? 'left' : 'right';
+        } else if (rightKnee) {
+          rightKneeSlot = rightKnee.x < perim.cx ? 'left' : 'right';
+        }
+
+        if (rightElbowAngle !== null && rightElbow) {
+          badges.push({
+            anchor: rightElbow,
+            text: `右肘 ${rightElbowAngle}°`,
+            slot: rightElbowSlot,
+            slotX: rightElbowSlot === 'left' ? perim.left - marginX : perim.right + marginX,
+            slotY: perim.top + perim.h * 0.24,
+            color: '#fb923c'
+          });
+        }
+        if (leftElbowAngle !== null && leftElbow) {
+          badges.push({
+            anchor: leftElbow,
+            text: `左肘 ${leftElbowAngle}°`,
+            slot: leftElbowSlot,
+            slotX: leftElbowSlot === 'left' ? perim.left - marginX : perim.right + marginX,
+            slotY: perim.top + perim.h * 0.24,
+            color: '#60a5fa'
+          });
+        }
+        if (rightKneeAngle !== null && rightKnee) {
+          badges.push({
+            anchor: rightKnee,
+            text: `右膝 ${rightKneeAngle}°`,
+            slot: rightKneeSlot,
+            slotX: rightKneeSlot === 'left' ? perim.left - marginX : perim.right + marginX,
+            slotY: perim.top + perim.h * 0.68,
+            color: '#c084fc'
+          });
+        }
+        if (leftKneeAngle !== null && leftKnee) {
+          badges.push({
+            anchor: leftKnee,
+            text: `左膝 ${leftKneeAngle}°`,
+            slot: leftKneeSlot,
+            slotX: leftKneeSlot === 'left' ? perim.left - marginX : perim.right + marginX,
+            slotY: perim.top + perim.h * 0.68,
+            color: '#34d399'
+          });
+        }
+        if (trunkTiltAngle !== null && midShoulder) {
+          badges.push({
+            anchor: midShoulder,
+            text: `軀幹傾角 ${Math.abs(trunkTiltAngle)}°`,
+            slot: 'top',
+            slotX: perim.cx,
+            slotY: perim.top - 22,
+            color: '#facc15'
+          });
+        }
       }
 
-      drawAntiCollisionBadges(ctx, badges);
+      if (showAngleBadges) {
+        drawAntiCollisionBadges(ctx, badges);
+      }
       ctx.restore();
     }
 
-    /* 角度標籤防重疊與高對比排版繪製 */
+    /* 角度標籤四周穩定排版與「斜-平」引線繪製 */
     function drawAntiCollisionBadges(ctx, badges) {
       if (!badges.length) return;
       ctx.font = 'bold 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
       const placedBoxes = [];
+      const cw = ctx.canvas.width;
+      const ch = ctx.canvas.height;
 
       for (const badge of badges) {
         const textMetrics = ctx.measureText(badge.text);
@@ -1690,21 +1837,25 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         const boxW = textW + 18;
         const boxH = 22;
 
-        let boxX = badge.anchor.x;
-        let boxY = badge.anchor.y;
+        let boxX = badge.slotX;
+        let boxY = badge.slotY;
 
-        if (badge.preferredSide === 'left') {
-          boxX = badge.anchor.x - boxW - 14;
-          boxY = badge.anchor.y - boxH / 2;
-        } else if (badge.preferredSide === 'right') {
-          boxX = badge.anchor.x + 14;
-          boxY = badge.anchor.y - boxH / 2;
-        } else if (badge.preferredSide === 'top') {
-          boxX = badge.anchor.x - boxW / 2;
-          boxY = Math.max(6, badge.anchor.y - boxH - (badge.topOffset || 18));
+        if (badge.slot === 'left') {
+          boxX = badge.slotX - boxW;
+          boxY = badge.slotY - boxH / 2;
+        } else if (badge.slot === 'right') {
+          boxX = badge.slotX;
+          boxY = badge.slotY - boxH / 2;
+        } else if (badge.slot === 'top') {
+          boxX = badge.slotX - boxW / 2;
+          boxY = badge.slotY - boxH;
         }
 
-        // 避免與之前標籤重疊 (Collision Detection)
+        // 限制標籤不超出畫布邊界
+        boxX = Math.max(8, Math.min(cw - boxW - 8, boxX));
+        boxY = Math.max(6, Math.min(ch - boxH - 6, boxY));
+
+        // 邊界壓縮時的防碰撞微調
         for (let tries = 0; tries < 4; tries++) {
           let hasOverlap = false;
           for (const pb of placedBoxes) {
@@ -1715,8 +1866,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
               boxY + boxH + 6 > pb.y
             ) {
               hasOverlap = true;
-              // 垂直微調偏移
               boxY += (boxY >= pb.y ? pb.h + 6 : -(boxH + 6));
+              boxY = Math.max(6, Math.min(ch - boxH - 6, boxY));
               break;
             }
           }
@@ -1725,17 +1876,51 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
         placedBoxes.push({ x: boxX, y: boxY, w: boxW, h: boxH });
 
-        // 繪製微型連接引線
+        // 繪製「斜 - 平」引線 (Diagonal -> Horizontal Callout Line)
+        ctx.save();
         ctx.beginPath();
         ctx.moveTo(badge.anchor.x, badge.anchor.y);
-        const targetX = boxX + (badge.preferredSide === 'left' ? boxW : badge.preferredSide === 'right' ? 0 : boxW / 2);
-        const targetY = boxY + boxH / 2;
-        ctx.lineTo(targetX, targetY);
+
+        if (badge.slot === 'left') {
+          const targetX = boxX + boxW;
+          const targetY = boxY + boxH / 2;
+          const elbowX = Math.max(badge.anchor.x, targetX + 16);
+          if (targetX + 16 <= badge.anchor.x) {
+            // 關節在右側、標籤在左側：關節 ➔ 斜線至轉折點 ➔ 水平平線進標籤
+            ctx.lineTo(targetX + 16, targetY);
+          } else {
+            ctx.lineTo(elbowX, targetY);
+          }
+          ctx.lineTo(targetX, targetY);
+        } else if (badge.slot === 'right') {
+          const targetX = boxX;
+          const targetY = boxY + boxH / 2;
+          if (targetX - 16 >= badge.anchor.x) {
+            // 關節在左側、標籤在右側：關節 ➔ 斜線至轉折點 ➔ 水平平線進標籤
+            ctx.lineTo(targetX - 16, targetY);
+          } else {
+            ctx.lineTo(Math.min(badge.anchor.x, targetX - 16), targetY);
+          }
+          ctx.lineTo(targetX, targetY);
+        } else {
+          // 頂端軀幹傾角：關節 ➔ 斜線至標籤下方轉折 ➔ 進標籤底緣
+          const targetX = boxX + boxW / 2;
+          const targetY = boxY + boxH;
+          ctx.lineTo(targetX, targetY + 10);
+          ctx.lineTo(targetX, targetY);
+        }
+
         ctx.strokeStyle = badge.color;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([2, 2]);
-        ctx.stroke();
+        ctx.lineWidth = 1.5;
         ctx.setLineDash([]);
+        ctx.stroke();
+
+        // 引線起點關節小圓點
+        ctx.fillStyle = badge.color;
+        ctx.beginPath();
+        ctx.arc(badge.anchor.x, badge.anchor.y, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
 
         // 繪製高對比半透明黑底圓角膠囊 (Pill Badge)
         ctx.save();
@@ -2762,6 +2947,18 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       btnToggleSkeleton.classList.toggle('border-lime-400/30', showSkeleton);
       btnToggleSkeleton.classList.toggle('bg-slate-800', !showSkeleton);
       btnToggleSkeleton.classList.toggle('text-slate-400', !showSkeleton);
+      renderStage();
+    });
+
+    // 角度標記顯示開關（可獨立關閉畫面上的角度膠囊與引線）
+    btnToggleAngles.addEventListener('click', () => {
+      showAngleBadges = !showAngleBadges;
+      anglesToggleText.textContent = showAngleBadges ? "隱藏角度" : "顯示角度";
+      btnToggleAngles.classList.toggle('bg-lime-400/20', showAngleBadges);
+      btnToggleAngles.classList.toggle('text-lime-300', showAngleBadges);
+      btnToggleAngles.classList.toggle('border-lime-400/30', showAngleBadges);
+      btnToggleAngles.classList.toggle('bg-slate-800', !showAngleBadges);
+      btnToggleAngles.classList.toggle('text-slate-400', !showAngleBadges);
       renderStage();
     });
 
