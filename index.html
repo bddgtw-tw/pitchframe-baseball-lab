@@ -647,6 +647,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     let timelineSeekTarget = null;
     let showSkeleton = true;
     let showAngleBadges = true;
+    const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '')
+      || (navigator.maxTouchPoints > 1 && Math.min(window.screen.width, window.screen.height) < 900);
+    const INFERENCE_MAX_EDGE = isMobileDevice ? 480 : 640;
+    const SNAPSHOT_MAX_EDGE = isMobileDevice ? 540 : 720;
 
     // MediaPipe & Detection State
     let pose = null;
@@ -801,11 +805,20 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     // Scrubbing serializes decode + inference. New thumb input only replaces the queued target.
     let scrubSession = false, scrubFlight = null, scrubQueuedTarget = null, scrubPair = null;
+    const pairSnapshotPool = [document.createElement('canvas'), document.createElement('canvas')];
+    let pairSnapshotCursor = 0;
     function captureDecodedFrame() {
-      const canvas = document.createElement('canvas');
-      const scale = Math.min(1,960/Math.max(video.videoWidth,video.videoHeight));
-      canvas.width = Math.max(1,Math.round(video.videoWidth*scale)); canvas.height = Math.max(1,Math.round(video.videoHeight*scale));
-      canvas.getContext('2d').drawImage(video,0,0,canvas.width,canvas.height);
+      // 雙緩衝複用畫布，避免手機端逐格建立 Canvas 造成 GC 卡頓
+      pairSnapshotCursor = (pairSnapshotCursor + 1) & 1;
+      const canvas = pairSnapshotPool[pairSnapshotCursor];
+      const scale = Math.min(1, SNAPSHOT_MAX_EDGE / Math.max(video.videoWidth, video.videoHeight));
+      const w = Math.max(1, Math.round(video.videoWidth * scale));
+      const h = Math.max(1, Math.round(video.videoHeight * scale));
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+      canvas.getContext('2d').drawImage(video, 0, 0, w, h);
       return canvas;
     }
     function startScrubSession() {
@@ -1015,7 +1028,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           if (epoch !== poseEpoch) return;
           const engine = new window.Pose({ locateFile: file => POSE_BASE + file });
           pose = engine;
-          engine.setOptions({ modelComplexity: 1, smoothLandmarks: true,
+          engine.setOptions({ modelComplexity: isMobileDevice ? 0 : 1, smoothLandmarks: true,
             enableSegmentation: false, minDetectionConfidence: 0.3, minTrackingConfidence: 0.3 });
           engine.onResults(results => {
             if (exportPoseResolver) {
@@ -1124,7 +1137,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       activePoseJob = { time: stamp.time, source: sourceGeneration, stamp, targetGeneration, region:targetRegion?{...targetRegion}:null };
       if (pairedPlaybackActive()) { activePoseJob.playPairGeneration=playPairGeneration; activePoseJob.playback=playbackGeneration; }
       const inputWidth=video.videoWidth*(targetRegion?targetRegion.width:1), inputHeight=video.videoHeight*(targetRegion?targetRegion.height:1);
-      const scale = Math.min(1, 960 / Math.max(inputWidth,inputHeight));
+      const scale = Math.min(1, INFERENCE_MAX_EDGE / Math.max(inputWidth,inputHeight));
       inferenceCanvas.width = Math.max(1, Math.round(inputWidth * scale));
       inferenceCanvas.height = Math.max(1, Math.round(inputHeight * scale));
       try {
@@ -1159,7 +1172,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
             if (!isPoseModelReady) { leaveScrubForNativeVideo(); }
             else pumpScrubQueue();
           }
-          if (pendingPoseFrame && isPoseModelReady && (!scrubSession || scrubFlight !== null)) { pendingPoseFrame = false; setTimeout(triggerPoseInference, 0); }
+          if (pendingPoseFrame && isPoseModelReady && (!scrubSession || scrubFlight !== null)) { pendingPoseFrame = false; setTimeout(triggerPoseInference, isMobileDevice ? 16 : 0); }
         }
       }
     }
@@ -1255,7 +1268,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
 
     function resizeCanvases() {
-      const dpr = window.devicePixelRatio || 1;
+      // 限制手機端 DPR 上限，大幅降低透明疊加層的像素填充負載
+      const dpr = Math.min(window.devicePixelRatio || 1, isMobileDevice ? 1.5 : 2);
       const w = Math.max(1, Math.round(stageContainer.clientWidth * dpr));
       const h = Math.max(1, Math.round(stageContainer.clientHeight * dpr));
 
@@ -1922,11 +1936,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         ctx.fill();
         ctx.restore();
 
-        // 繪製高對比半透明黑底圓角膠囊 (Pill Badge)
+        // 繪製高對比半透明黑底圓角膠囊 (Pill Badge，不使用 shadowBlur 避免手機 CPU 模糊計算卡頓)
         ctx.save();
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
-        ctx.shadowBlur = 6;
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
         ctx.beginPath();
         roundRect(ctx, boxX, boxY, boxW, boxH, 6);
         ctx.fill();
@@ -2096,9 +2108,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         }
       }
 
-      // 播放時持續進行姿態分析
+      // 播放時持續進行姿態分析；配對播放由 onPoseResults 驅動畫面重繪，避免 60fps 重複繪製整張 Canvas
       triggerPoseInference();
-      renderStage();
+      if (!pairedPlaybackActive()) {
+        updateTelemetryAndCounters();
+      }
 
       requestAnimationFrame(() => requestPlaybackTick(token));
     }
