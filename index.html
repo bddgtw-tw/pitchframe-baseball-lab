@@ -942,9 +942,25 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     let drawStartPoint = null;
     let pendingTextPos = null;
 
+    // Video Blob URL lifecycle tracking
+    let currentVideoObjectUrl = null;
+    window.addEventListener('pagehide', () => {
+      if (currentVideoObjectUrl) {
+        URL.revokeObjectURL(currentVideoObjectUrl);
+        currentVideoObjectUrl = null;
+      }
+    });
+
     // Export state
     let isExportingVideo = false;
     let exportCancelled = false;
+    let activeMediaRecorder = null;
+    let activeExportStreams = [];
+    let exportRafId = null;
+    let exportVfcId = null;
+    let exportAbortController = null;
+    let exportOriginalMuted = false;
+    let exportPoseResolver = null;
 
     /* ==========================================================================
        1. 初始化 MediaPipe Pose 模型
@@ -994,6 +1010,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           engine.setOptions({ modelComplexity: 1, smoothLandmarks: true,
             enableSegmentation: false, minDetectionConfidence: 0.3, minTrackingConfidence: 0.3 });
           engine.onResults(results => {
+            if (exportPoseResolver) {
+              const resolve = exportPoseResolver;
+              exportPoseResolver = null;
+              resolve(results);
+              return;
+            }
             if (epoch === poseEpoch && activePoseJob && activePoseJob.source === sourceGeneration) onPoseResults(results);
           });
           await withPoseTimeout(engine.initialize(), 60000, '模型／WebAssembly 載入或初始化超過 60 秒');
@@ -1077,10 +1099,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       currentLandmarks = null;
       isCurrentLandmarkEstimated = false;
       fallbackNotice.classList.add('hidden');
-      reportPoseStatus('此影格未偵測到人物', `模型已執行，${curTime.toFixed(3)} 秒未回傳骨架。請播放或換到人物清楚的影格；不以預設骨架替代。`);
+      reportPoseStatus('已分析但未偵測到人物', `已完成分析，${curTime.toFixed(3)} 秒未偵測到人物骨架。請播放或換到人物清楚的影格；不以預設骨架替代。`);
     }
 
     async function triggerPoseInference() {
+      if (isExportingVideo) return;
       if (!isPoseModelReady || !pose) return;
       if (video.readyState < 2 || video.seeking || !video.videoWidth || !video.videoHeight) return;
       const stamp = frameStamp();
@@ -1160,13 +1183,18 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       redoStack = [];
       updateUndoRedoButtons();
 
+      const previousObjectUrl = currentVideoObjectUrl;
       const objectUrl = URL.createObjectURL(file);
+      currentVideoObjectUrl = objectUrl;
       if (video.srcObject) {
         video.srcObject.getTracks().forEach(track => track.stop());
         video.srcObject = null;
       }
       video.src = objectUrl;
       video.load();
+      if (previousObjectUrl) {
+        URL.revokeObjectURL(previousObjectUrl);
+      }
 
       video.onloadedmetadata = () => {
         videoDuration = video.duration || 0;
@@ -1344,19 +1372,62 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       updateTelemetryAndCounters();
     }
 
-    // Conservative display anchor, not an anatomical cranial center or head-pitch measurement.
-    // Both ears must be credible. A helmet, profile or occlusion may legitimately hide this marker.
+    // Tiered head position anchor:
+    // 1. Bilateral ears (exact display anchor)
+    // 2. Single ear + nose/same-side eye (profile fallback, marked estimated)
+    // 3. Shoulder-hip axis extrapolation (helmet/occlusion fallback, marked estimated)
     const HEAD_EAR_MIN_VISIBILITY = 0.65;
     function getHeadPositionAnchor(lm, minVisibility = HEAD_EAR_MIN_VISIBILITY) {
       if (!lm) return null;
-      const credible = point => point && Number.isFinite(point.x) && Number.isFinite(point.y)
+      const credible = (point, thresh = minVisibility) => point && Number.isFinite(point.x) && Number.isFinite(point.y)
         && point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1
-        && Number.isFinite(point.visibility) && point.visibility >= minVisibility
-        && (point.presence === undefined || (Number.isFinite(point.presence) && point.presence >= minVisibility));
-      const left = lm[7], right = lm[8];
-      if (!credible(left) || !credible(right)) return null;
-      return { x: (left.x + right.x) / 2, y: (left.y + right.y) / 2,
-        confidence: Math.min(left.visibility, right.visibility), method: 'bilateral-ear-midpoint' };
+        && Number.isFinite(point.visibility) && point.visibility >= thresh
+        && (point.presence === undefined || (Number.isFinite(point.presence) && point.presence >= thresh));
+      const leftEar = lm[7], rightEar = lm[8];
+      if (credible(leftEar) && credible(rightEar)) {
+        return {
+          x: (leftEar.x + rightEar.x) / 2,
+          y: (leftEar.y + rightEar.y) / 2,
+          confidence: Math.min(leftEar.visibility, rightEar.visibility),
+          estimated: false,
+          method: 'bilateral-ear-midpoint'
+        };
+      }
+      // Tier 2: Profile fallback (single ear + nose or eye)
+      const nose = lm[0], leftEye = lm[2], rightEye = lm[5];
+      const ear = credible(leftEar) ? leftEar : (credible(rightEar) ? rightEar : null);
+      if (ear) {
+        const facePt = credible(nose, 0.5) ? nose : (ear === leftEar && credible(leftEye, 0.5) ? leftEye : (ear === rightEar && credible(rightEye, 0.5) ? rightEye : null));
+        if (facePt) {
+          return {
+            x: ear.x * 0.65 + facePt.x * 0.35,
+            y: ear.y * 0.65 + facePt.y * 0.35,
+            confidence: Math.min(ear.visibility, facePt.visibility),
+            estimated: true,
+            method: 'single-ear-face-fallback'
+          };
+        }
+      }
+      // Tier 3: Shoulder-hip axis extrapolation
+      const ls = lm[11], rs = lm[12], lh = lm[23], rh = lm[24];
+      if (credible(ls) && credible(rs) && credible(lh) && credible(rh)) {
+        const msx = (ls.x + rs.x) / 2, msy = (ls.y + rs.y) / 2;
+        const mhx = (lh.x + rh.x) / 2, mhy = (lh.y + rh.y) / 2;
+        const ax = msx - mhx, ay = msy - mhy;
+        const torsoLen = Math.hypot(ax, ay);
+        if (torsoLen > 0.02) {
+          const ex = Math.max(0.02, Math.min(0.98, msx + ax * 0.35));
+          const ey = Math.max(0.02, Math.min(0.98, msy + ay * 0.35));
+          return {
+            x: ex,
+            y: ey,
+            confidence: Math.min(ls.visibility, rs.visibility),
+            estimated: true,
+            method: 'shoulder-hip-axis-extrapolation'
+          };
+        }
+      }
+      return null;
     }
 
     /* 繪製棒球專用精簡骨架：
@@ -1481,17 +1552,33 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         drawSegment(rightAnkle, rightToe, '#c084fc', 2.5);
       }
 
-      // F. 頭部位置小點與連線；不繪製可能被誤認為顱骨輪廓的大圓圈
+      // F. 頭部位置小點與連線；fallback 估算採虛線琥珀色樣式以示區分
       if (headCenter && midShoulder) {
-        drawSegment(headCenter, midShoulder, '#e2e8f0', 2.5);
-        ctx.beginPath();
-        const headRadius = Math.max(3, Math.min(6, ctx.canvas.height / 180));
-        ctx.arc(headCenter.x, headCenter.y, headRadius, 0, Math.PI * 2);
-        ctx.fillStyle = '#f8fafc';
-        ctx.fill();
-        ctx.strokeStyle = '#0f172a';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
+        ctx.save();
+        if (headAnchor && headAnchor.estimated) {
+          ctx.setLineDash([4, 4]);
+          drawSegment(headCenter, midShoulder, 'rgba(251, 191, 36, 0.75)', 2);
+          ctx.beginPath();
+          const headRadius = Math.max(4, Math.min(7, ctx.canvas.height / 160));
+          ctx.arc(headCenter.x, headCenter.y, headRadius, 0, Math.PI * 2);
+          ctx.fillStyle = 'rgba(251, 191, 36, 0.25)';
+          ctx.fill();
+          ctx.strokeStyle = '#fbbf24';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        } else {
+          ctx.setLineDash([]);
+          drawSegment(headCenter, midShoulder, '#e2e8f0', 2.5);
+          ctx.beginPath();
+          const headRadius = Math.max(3, Math.min(6, ctx.canvas.height / 180));
+          ctx.arc(headCenter.x, headCenter.y, headRadius, 0, Math.PI * 2);
+          ctx.fillStyle = '#f8fafc';
+          ctx.fill();
+          ctx.strokeStyle = '#0f172a';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+        ctx.restore();
       }
 
       // G. 關鍵關節節點圓點
@@ -1575,13 +1662,14 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           color: '#c084fc'
         });
       }
-      if (trunkTiltAngle !== null && (headCenter || midShoulder)) {
-        // 頭部位置僅用於標籤定位；軀幹傾角仍由肩／髖計算
-        const tiltAnchor = headCenter || midShoulder;
+      if (trunkTiltAngle !== null && midShoulder) {
+        // 軀幹傾角標籤完全與頭部辨識解耦：以肩中點為錨點並依軀幹長度向上留白，避免遮擋臉部或胸口
+        const torsoPx = pelvisCenter ? Math.hypot(midShoulder.x - pelvisCenter.x, midShoulder.y - pelvisCenter.y) : 80;
         badges.push({
-          anchor: tiltAnchor,
+          anchor: midShoulder,
           text: `軀幹傾角 ${Math.abs(trunkTiltAngle)}°`,
           preferredSide: 'top',
+          topOffset: Math.max(36, Math.round(torsoPx * 0.55)),
           color: '#facc15'
         });
       }
@@ -1613,7 +1701,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           boxY = badge.anchor.y - boxH / 2;
         } else if (badge.preferredSide === 'top') {
           boxX = badge.anchor.x - boxW / 2;
-          boxY = badge.anchor.y - boxH - 18;
+          boxY = Math.max(6, badge.anchor.y - boxH - (badge.topOffset || 18));
         }
 
         // 避免與之前標籤重疊 (Collision Detection)
@@ -2170,21 +2258,129 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       link.click();
     });
 
-    // 輸出骨架分析影片 (嚴格遵循瀏覽器支援，絕不將 WebM 假裝為 MP4)
+    // 統一匯出清理：涵蓋 recorder、所有 stream tracks、RAF / video-frame callback、事件監聽與 UI 狀態
+    function cleanupExport(options = {}) {
+      const { keepPaused = true } = options;
+      if (exportAbortController) {
+        try { exportAbortController.abort(); } catch (_) {}
+        exportAbortController = null;
+      }
+      if (exportPoseResolver) {
+        const resolve = exportPoseResolver;
+        exportPoseResolver = null;
+        try { resolve(null); } catch (_) {}
+      }
+      if (exportRafId !== null) {
+        cancelAnimationFrame(exportRafId);
+        exportRafId = null;
+      }
+      if (exportVfcId !== null && typeof video.cancelVideoFrameCallback === 'function') {
+        try { video.cancelVideoFrameCallback(exportVfcId); } catch (_) {}
+        exportVfcId = null;
+      }
+      if (activeMediaRecorder) {
+        activeMediaRecorder.ondataavailable = null;
+        activeMediaRecorder.onstop = null;
+        activeMediaRecorder.onerror = null;
+        if (activeMediaRecorder.state !== 'inactive') {
+          try { activeMediaRecorder.stop(); } catch (_) {}
+        }
+        activeMediaRecorder = null;
+      }
+      if (activeExportStreams.length) {
+        for (const stream of activeExportStreams) {
+          try {
+            stream.getTracks().forEach(track => {
+              try { track.stop(); } catch (_) {}
+            });
+          } catch (_) {}
+        }
+        activeExportStreams = [];
+      }
+      video.muted = exportOriginalMuted;
+      video.playbackRate = currentSpeed;
+      isExportingVideo = false;
+      exportModal.classList.add('hidden');
+      if (keepPaused) {
+        pauseVideo(false, false);
+      }
+    }
+
+    function seekVideoForExport(targetTime, signal) {
+      return new Promise((resolve, reject) => {
+        if (signal && signal.aborted) { reject(new Error('EXPORT_CANCELLED')); return; }
+        const onAbort = () => {
+          video.removeEventListener('seeked', onSeeked);
+          reject(new Error('EXPORT_CANCELLED'));
+        };
+        const onSeeked = () => {
+          if (signal) signal.removeEventListener('abort', onAbort);
+          requestAnimationFrame(() => resolve());
+        };
+        if (signal) signal.addEventListener('abort', onAbort, { once: true });
+        if (Math.abs(video.currentTime - targetTime) < 0.0001 && !video.seeking && video.readyState >= 2) {
+          if (signal) signal.removeEventListener('abort', onAbort);
+          resolve();
+          return;
+        }
+        video.addEventListener('seeked', onSeeked, { once: true });
+        video.currentTime = targetTime;
+      });
+    }
+
+    async function runExportSingleFramePose(signal) {
+      if (!pose || !isPoseModelReady) return null;
+      if (signal && signal.aborted) throw new Error('EXPORT_CANCELLED');
+
+      const inputWidth = video.videoWidth * (targetRegion ? targetRegion.width : 1);
+      const inputHeight = video.videoHeight * (targetRegion ? targetRegion.height : 1);
+      const scale = Math.min(1, 960 / Math.max(inputWidth, inputHeight));
+      inferenceCanvas.width = Math.max(1, Math.round(inputWidth * scale));
+      inferenceCanvas.height = Math.max(1, Math.round(inputHeight * scale));
+
+      if (targetRegion) {
+        inferenceCtx.drawImage(
+          video,
+          targetRegion.x * video.videoWidth,
+          targetRegion.y * video.videoHeight,
+          targetRegion.width * video.videoWidth,
+          targetRegion.height * video.videoHeight,
+          0, 0, inferenceCanvas.width, inferenceCanvas.height
+        );
+      } else {
+        inferenceCtx.drawImage(video, 0, 0, inferenceCanvas.width, inferenceCanvas.height);
+      }
+
+      const resultPromise = new Promise(resolve => {
+        exportPoseResolver = resolve;
+      });
+      await withPoseTimeout(pose.send({ image: inferenceCanvas }), 15000, '預分析影格辨識逾時');
+      const results = await resultPromise;
+      if (signal && signal.aborted) throw new Error('EXPORT_CANCELLED');
+      if (!results || !results.poseLandmarks || results.poseLandmarks.length < 25) return null;
+
+      if (targetRegion) {
+        if (!validateTargetPose(results.poseLandmarks, video.currentTime, seekGeneration)) {
+          return null;
+        }
+        return remapTargetLandmarks(results.poseLandmarks, targetRegion);
+      }
+      return results.poseLandmarks.map(p => ({ ...p }));
+    }
+
+    // 輸出骨架分析影片（預分析快取 -> requestVideoFrameCallback 查表合成錄製，含音訊偵測與無聲 fallback）
     btnExportVideo.addEventListener('click', async () => {
-      if(targetSelecting){alert('請先完成或取消球員框選。');return;}
+      if (targetSelecting) { alert('請先完成或取消球員框選。'); return; }
       if (scrubSession) { alert('請先放開進度條，等目標影格同步完成後再匯出。'); return; }
-      alert('影片輸出只合成與當前影格一致的骨架。AI 趕不上播放時會省略骨架，不沿用上一格；需要完整骨架時請改用暫停後的 PNG。');
       if (!video.videoWidth || !video.videoHeight || !effectiveDuration) {
         alert("請先載入球員影片！");
         return;
       }
       if (isExportingVideo) return;
 
-      // 1. 偵測瀏覽器真實支援格式
+      // 1. 偵測瀏覽器真實支援格式（絕不將 WebM 假裝為 MP4）
       let mimeType = 'video/webm';
       let fileExt = 'webm';
-
       if (typeof MediaRecorder !== 'undefined') {
         if (MediaRecorder.isTypeSupported('video/mp4; codecs="avc1.42E01E, mp4a.40.2"') || MediaRecorder.isTypeSupported('video/mp4')) {
           mimeType = 'video/mp4';
@@ -2198,104 +2394,231 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         }
       }
 
-      exportFormatNotice.textContent = `偵測到瀏覽器支援格式：${fileExt.toUpperCase()} (${mimeType})`;
-      exportProgressBar.style.width = '0%';
-      exportProgressPercent.textContent = '0%';
-      exportModal.classList.remove('hidden');
       isExportingVideo = true;
       exportCancelled = false;
+      exportAbortController = new AbortController();
+      const signal = exportAbortController.signal;
+      exportOriginalMuted = video.muted;
+      pauseVideo(false, false);
 
-      pauseVideo(false,false);
-      video.currentTime = 0;
-      await new Promise(r => setTimeout(r, 200));
+      exportModal.classList.remove('hidden');
+      exportProgressBar.style.width = '0%';
+      exportProgressPercent.textContent = '0%';
 
-      // 建立錄影畫布 (解析度適配，最大邊限制 1920 保持流暢與記憶體安全)
-      const exportCanvas = document.createElement('canvas');
-      const maxEdge = 1920;
-      const scale = Math.min(1, maxEdge / Math.max(video.videoWidth, video.videoHeight));
-      exportCanvas.width = Math.round(video.videoWidth * scale);
-      exportCanvas.height = Math.round(video.videoHeight * scale);
-      const expCtx = exportCanvas.getContext('2d');
+      const exportPoseCache = new Map();
 
-      const stream = exportCanvas.captureStream(30);
-      let mediaRecorder;
       try {
-        mediaRecorder = new MediaRecorder(stream, { mimeType });
-      } catch (e) {
-        console.warn("Falling back to default mimeType:", e);
-        mediaRecorder = new MediaRecorder(stream);
-        fileExt = 'webm'; // 安全 fallback
+        // 階段 1：離線逐格預分析並以來源影格索引快取骨架（未偵測到人物則誠實記為 null，絕不虛構）
+        if (showSkeleton && isPoseModelReady && pose) {
+          video.muted = true;
+          if (modelSourceGeneration !== sourceGeneration) {
+            await withPoseTimeout(Promise.resolve(pose.reset()), 10000, '模型重設逾時');
+            modelSourceGeneration = sourceGeneration;
+          }
+
+          const frameTimes = [];
+          if (sourceFrameIndex) {
+            const limit = Math.max(0, effectiveDuration - 0.000001);
+            const lastIdx = sourceFrameIndex.frameAt(limit);
+            for (let i = 0; i <= lastIdx; i++) {
+              frameTimes.push({ index: i, seekTime: sourceFrameIndex.seekTime(i) });
+            }
+          } else {
+            const totalFallback = Math.max(1, Math.floor(effectiveDuration / fallbackFrameDuration));
+            for (let i = 0; i <= totalFallback; i++) {
+              frameTimes.push({ index: i, seekTime: Math.min(effectiveDuration, i * fallbackFrameDuration) });
+            }
+          }
+
+          exportFormatNotice.textContent = `步驟 1/2：預分析來源影格骨架（共 ${frameTimes.length} 格・未偵測到人物將保持空白）`;
+          for (let k = 0; k < frameTimes.length; k++) {
+            if (signal.aborted || exportCancelled) throw new Error('EXPORT_CANCELLED');
+            const item = frameTimes[k];
+            await seekVideoForExport(item.seekTime, signal);
+            const landmarks = await runExportSingleFramePose(signal);
+            exportPoseCache.set(item.index, { analyzed: true, landmarks });
+
+            const pct = Math.round(((k + 1) / frameTimes.length) * 100);
+            exportProgressBar.style.width = `${pct}%`;
+            exportProgressPercent.textContent = `預分析 ${pct}%`;
+          }
+        }
+
+        if (signal.aborted || exportCancelled) throw new Error('EXPORT_CANCELLED');
+
+        // 階段 2：建立輸出畫布、偵測音訊能力並以 requestVideoFrameCallback 查表錄製
+        exportProgressBar.style.width = '0%';
+        exportProgressPercent.textContent = '0%';
+
+        await seekVideoForExport(0, signal);
+
+        const exportCanvas = document.createElement('canvas');
+        const maxEdge = 1920;
+        const scale = Math.min(1, maxEdge / Math.max(video.videoWidth, video.videoHeight));
+        exportCanvas.width = Math.max(1, Math.round(video.videoWidth * scale));
+        exportCanvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+        const expCtx = exportCanvas.getContext('2d');
+
+        const canvasStream = exportCanvas.captureStream(30);
+        activeExportStreams.push(canvasStream);
+
+        // 音訊能力偵測（Safari 對 captureStream 支援不可靠，失敗時安全降級為無聲影片）
+        let audioTracks = [];
+        let audioStatusMsg = '此瀏覽器將輸出無聲影片';
+        try {
+          const captureFn = video.captureStream || video.mozCaptureStream;
+          if (typeof captureFn === 'function') {
+            const mediaStream = captureFn.call(video);
+            if (mediaStream) {
+              activeExportStreams.push(mediaStream);
+              const tracks = mediaStream.getAudioTracks();
+              if (tracks && tracks.length > 0) {
+                audioTracks = tracks;
+                audioStatusMsg = '已偵測到來源音軌，將合併錄製音訊';
+              } else {
+                audioStatusMsg = '來源無音軌，將輸出無聲影片';
+              }
+            }
+          }
+        } catch (audioErr) {
+          console.warn('Audio capture unavailable, falling back to silent video:', audioErr);
+          audioTracks = [];
+          audioStatusMsg = '此瀏覽器將輸出無聲影片';
+        }
+
+        const createRecorderWithFallback = (withAudio) => {
+          const stream = withAudio && audioTracks.length
+            ? new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks])
+            : canvasStream;
+          try {
+            return new MediaRecorder(stream, { mimeType });
+          } catch (_) {
+            return new MediaRecorder(stream);
+          }
+        };
+
+        let mediaRecorder;
+        try {
+          mediaRecorder = createRecorderWithFallback(true);
+        } catch (recErr) {
+          // 若合併音軌導致 MediaRecorder 建立失敗，立即降級為純視訊錄製
+          audioTracks = [];
+          audioStatusMsg = '此瀏覽器將輸出無聲影片';
+          mediaRecorder = createRecorderWithFallback(false);
+        }
+        activeMediaRecorder = mediaRecorder;
+        if (mediaRecorder.mimeType && !mediaRecorder.mimeType.includes('mp4')) {
+          mimeType = mediaRecorder.mimeType;
+          fileExt = 'webm';
+        }
+
+        exportFormatNotice.textContent = `步驟 2/2：合成錄製 ${fileExt.toUpperCase()}（${audioStatusMsg}）`;
+
+        const recordedChunks = [];
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) recordedChunks.push(e.data);
+        };
+
+        mediaRecorder.onerror = (e) => {
+          console.error('MediaRecorder error:', e);
+          cleanupExport();
+          alert('影片錄製過程發生錯誤，已取消匯出並釋放資源。');
+        };
+
+        mediaRecorder.onstop = () => {
+          const wasCancelled = exportCancelled || signal.aborted;
+          const chunksCopy = [...recordedChunks];
+          const finalMime = mimeType;
+          const finalExt = fileExt;
+          cleanupExport();
+
+          if (wasCancelled || chunksCopy.length === 0) return;
+
+          const blob = new Blob(chunksCopy, { type: finalMime });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `少棒骨架動作分析_${Date.now()}.${finalExt}`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        };
+
+        const drawFrameByTime = (mediaTime) => {
+          expCtx.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
+          expCtx.drawImage(video, 0, 0, exportCanvas.width, exportCanvas.height);
+
+          const frameIdx = sourceFrameIndex
+            ? sourceFrameIndex.frameAt(mediaTime)
+            : Math.round(mediaTime / fallbackFrameDuration);
+          const entry = exportPoseCache.get(frameIdx);
+
+          if (showSkeleton && entry && entry.analyzed && entry.landmarks && entry.landmarks.length >= 25) {
+            drawSimplifiedBaseballSkeleton(expCtx, entry.landmarks, false);
+          }
+
+          for (const item of annotations) {
+            drawSingleAnnotation(expCtx, item);
+          }
+
+          const progress = Math.min(100, Math.round((mediaTime / effectiveDuration) * 100));
+          exportProgressBar.style.width = `${progress}%`;
+          exportProgressPercent.textContent = `錄製 ${progress}%`;
+        };
+
+        // 先繪製第 0 格確保首幀完整
+        drawFrameByTime(0);
+
+        video.muted = audioTracks.length > 0 ? false : exportOriginalMuted;
+        video.playbackRate = 1.0;
+        mediaRecorder.start(250);
+
+        const stopRecordingIfDone = () => {
+          if (!activeMediaRecorder || activeMediaRecorder.state === 'inactive') return true;
+          if (video.currentTime >= effectiveDuration || video.ended) {
+            video.pause();
+            activeMediaRecorder.stop();
+            return true;
+          }
+          return false;
+        };
+
+        if (typeof video.requestVideoFrameCallback === 'function') {
+          const onVideoFrame = (_now, metadata) => {
+            if (!isExportingVideo || exportCancelled || signal.aborted) return;
+            const t = Number.isFinite(metadata?.mediaTime) ? metadata.mediaTime : video.currentTime;
+            drawFrameByTime(t);
+            if (!stopRecordingIfDone()) {
+              exportVfcId = video.requestVideoFrameCallback(onVideoFrame);
+            }
+          };
+          exportVfcId = video.requestVideoFrameCallback(onVideoFrame);
+        } else {
+          const onRafFrame = () => {
+            if (!isExportingVideo || exportCancelled || signal.aborted) return;
+            drawFrameByTime(video.currentTime);
+            if (!stopRecordingIfDone()) {
+              exportRafId = requestAnimationFrame(onRafFrame);
+            }
+          };
+          exportRafId = requestAnimationFrame(onRafFrame);
+        }
+
+        await video.play();
+      } catch (err) {
+        const cancelled = exportCancelled || (err && err.message === 'EXPORT_CANCELLED');
+        cleanupExport();
+        if (!cancelled) {
+          console.error('Export failed:', err);
+          alert(`匯出影片失敗：${err?.message || err}`);
+        }
       }
-
-      const recordedChunks = [];
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) recordedChunks.push(e.data);
-      };
-
-      mediaRecorder.onstop = () => {
-        if (exportCancelled) {
-          isExportingVideo = false;
-          exportModal.classList.add('hidden');
-          return;
-        }
-
-        const blob = new Blob(recordedChunks, { type: mimeType });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `少棒骨架動作分析_${Date.now()}.${fileExt}`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-
-        isExportingVideo = false;
-        exportModal.classList.add('hidden');
-        pauseVideo(false,false);
-      };
-
-      mediaRecorder.start();
-      video.playbackRate = 1.0;
-      video.play();
-
-      const exportFrameLoop = () => {
-        if (!isExportingVideo || exportCancelled) return;
-
-        // 合成畫面
-        expCtx.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
-        expCtx.drawImage(video, 0, 0, exportCanvas.width, exportCanvas.height);
-
-        // 繪製骨架與標註
-        if (showSkeleton && poseMatchesFrame() && currentLandmarks && currentLandmarks.length >= 25) {
-          drawSimplifiedBaseballSkeleton(expCtx, currentLandmarks, isCurrentLandmarkEstimated);
-        }
-
-        for (const item of annotations) {
-          drawSingleAnnotation(expCtx, item);
-        }
-
-        // 更新進度條
-        const progress = Math.min(100, Math.round((video.currentTime / effectiveDuration) * 100));
-        exportProgressBar.style.width = `${progress}%`;
-        exportProgressPercent.textContent = `${progress}%`;
-
-        if (video.currentTime >= effectiveDuration || video.ended) {
-          mediaRecorder.stop();
-          return;
-        }
-
-        triggerPoseInference();
-        requestAnimationFrame(exportFrameLoop);
-      };
-
-      requestAnimationFrame(exportFrameLoop);
     });
 
     btnCancelExport.addEventListener('click', () => {
       exportCancelled = true;
-      isExportingVideo = false;
-      exportModal.classList.add('hidden');
-      pauseVideo(false,false);
+      cleanupExport();
     });
 
     /* ==========================================================================
