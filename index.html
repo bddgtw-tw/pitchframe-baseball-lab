@@ -246,6 +246,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         <span>選擇影片</span>
       </button>
 
+      <button id="btnClearVideo" class="hidden flex items-center gap-1 bg-rose-500/20 hover:bg-rose-500/30 active:scale-95 text-rose-200 text-xs font-semibold px-2.5 py-2 rounded-lg border border-rose-500/40 transition" title="清除目前載入的影片">
+        <span>✕</span>
+        <span>清除影片</span>
+      </button>
+
     </div>
   </header>
 
@@ -574,6 +579,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const fileInput = document.getElementById('fileInput');
     const btnCapture = document.getElementById('btnCapture');
     const btnChoose = document.getElementById('btnChoose');
+    const btnClearVideo = document.getElementById('btnClearVideo');
     const btnEmptyCapture = document.getElementById('btnEmptyCapture');
     const btnEmptyChoose = document.getElementById('btnEmptyChoose');
     const btnPlayPause = document.getElementById('btnPlayPause');
@@ -1197,8 +1203,100 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     /* ==========================================================================
        3. 影片載入、30 秒限制與解析度配置
        ========================================================================== */
+    function clearLoadedVideo() {
+      if (isExportingVideo) {
+        exportCancelled = true;
+        cleanupExport({ keepPaused: false });
+      }
+      cancelTargetSelection();
+      targetRegion = null;
+      ++targetGeneration;
+      targetTorso = null;
+      targetNeedsRedraw = false;
+      btnClearTarget.disabled = true;
+      btnSelectTarget.textContent = '指定分析球員';
+      targetStatus.textContent = '未指定：AI 分析全畫面。可暫停後框住一位球員全身。';
+      renderTargetRegion();
+
+      endScrubSession();
+      clearPlaybackPair();
+      cancelPausedRecovery();
+      ++sourceGeneration;
+      ++playbackGeneration;
+      ++seekGeneration;
+      isPlaying = false;
+      isTimelineDragging = false;
+      timelineSeekTarget = null;
+      lastSentFrame = null;
+      sourceFrameIndex = null;
+      frameIndexPending = false;
+      videoDuration = 0;
+      effectiveDuration = 0;
+
+      video.pause();
+      if (video.srcObject) {
+        video.srcObject.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+      }
+      video.removeAttribute('src');
+      video.load();
+      if (currentVideoObjectUrl) {
+        URL.revokeObjectURL(currentVideoObjectUrl);
+        currentVideoObjectUrl = null;
+      }
+
+      poseCache.clear();
+      smoothedCalloutBox = null;
+      hasEverDetectedRealPerson = false;
+      lastValidLandmarks = null;
+      currentLandmarks = null;
+      currentPoseStamp = null;
+      presentedFrame = null;
+
+      annotations = [];
+      undoStack = [];
+      redoStack = [];
+      updateUndoRedoButtons();
+      renderAnnotations();
+
+      if (mainCanvas.width && mainCanvas.height) {
+        mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
+      }
+
+      stageContainer.style.aspectRatio = '16 / 9';
+      stageContainer.style.maxWidth = '';
+      scrubber.value = 0;
+      timeCurrent.textContent = '00:00';
+      timeDuration.textContent = '00:00';
+      timeFrameBadge.textContent = '00:00.0';
+      sourceFrameStatus.textContent = '尚未載入影片';
+      playIcon.textContent = '▶ 播放';
+      btnPlayPause.classList.replace('bg-amber-400', 'bg-lime-400');
+      btnPlayPause.classList.replace('hover:bg-amber-300', 'hover:bg-lime-300');
+
+      durationWarning.classList.add('hidden');
+      fallbackNotice.classList.add('hidden');
+      textInputModal.classList.add('hidden');
+      btnClearVideo.classList.add('hidden');
+      emptyPrompt.classList.remove('hidden');
+
+      cameraInput.value = '';
+      fileInput.value = '';
+      updateTelemetryAndCounters();
+      reportPoseStatus(
+        isPoseModelReady ? 'AI 模型已就緒' : '等待影片輸入',
+        '已清除目前影片，請拍攝或選擇新影片。'
+      );
+    }
+
+    btnClearVideo.addEventListener('click', (e) => {
+      e.stopPropagation();
+      clearLoadedVideo();
+    });
+
     function handleVideoFile(file) {
       if (!file) return;
+      btnClearVideo.classList.remove('hidden');
       cancelTargetSelection();targetRegion=null;++targetGeneration;targetTorso=null;targetNeedsRedraw=false;
       btnClearTarget.disabled=true;btnSelectTarget.textContent='指定分析球員';targetStatus.textContent='新影片：分析範圍已重設。';renderTargetRegion();
       endScrubSession();
