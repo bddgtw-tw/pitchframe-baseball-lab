@@ -793,7 +793,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     let playPair = null;
     let playPairGeneration = 0;
     function pairedPlaybackActive() {
-      return isPlaying && showSkeleton && isPoseModelReady && !scrubSession && !isExportingVideo;
+      // 播放時不以靜態快照覆蓋原生 <video>，讓硬體解碼維持全速流暢播放，骨架以透明疊加層即時同步
+      return false;
+    }
+    function getPoseCacheKey(time) {
+      const idx = sourceFrameIndex ? sourceFrameIndex.frameAt(time) : Math.round(time * 30);
+      return `${targetGeneration}:${idx}`;
     }
     function clearPlaybackPair() { ++playPairGeneration; playPair=null; }
     function seedPlaybackPair() {
@@ -1077,10 +1082,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         && activePoseJob.playPairGeneration===playPairGeneration && activePoseJob.playback===playbackGeneration
         && activePoseJob.source===sourceGeneration && activePoseJob.stamp.seek===seekGeneration;
       if (activePoseJob.playPairGeneration !== undefined && !pairedResult) return;
-      if (!pairedResult && !sameFrame(activePoseJob.stamp, frameStamp())) return;
+      // 播放期間允許非同步推論結果寫入快取並更新疊加層，避免因影片前進而丟棄結果；暫停/逐格時維持嚴格同格比對
+      if (!isPlaying && !pairedResult && !sameFrame(activePoseJob.stamp, frameStamp())) return;
+      if (isPlaying && (activePoseJob.source !== sourceGeneration || activePoseJob.stamp.seek !== seekGeneration)) return;
       currentPoseStamp = activePoseJob.stamp;
       const curTime = activePoseJob.time;
-      const frameKey = Math.round(curTime * 30);
+      const frameKey = getPoseCacheKey(curTime);
 
       if(activePoseJob.region) {
         if(!validateTargetPose(results.poseLandmarks,activePoseJob.time,activePoseJob.stamp.seek)) {
@@ -1101,7 +1108,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         reportPoseStatus('AI 骨架追蹤中', `已辨識影格 ${curTime.toFixed(3)} 秒。${showSkeleton ? '' : '骨架顯示目前已關閉，請開啟「顯示骨架」。'}`);
         statusDot.className = "w-2 h-2 rounded-full bg-emerald-400";
       } else {
-        // 當前影格未辨識到人物，不繪製虛構骨架
+        // 當前影格未辨識到人物，不繪製虛構骨架，仍記錄已分析狀態供循環播放跳過重複推論
+        poseCache.set(frameKey, null);
         handleMissedPoseFrame(curTime, frameKey);
       }
 
@@ -1129,6 +1137,15 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (video.readyState < 2 || video.seeking || !video.videoWidth || !video.videoHeight) return;
       const stamp = frameStamp();
       if (!stamp) { observePresentedFrame(); schedulePausedRecovery(); return; }
+      const cacheKey = getPoseCacheKey(stamp.time);
+      if (poseCache.has(cacheKey)) {
+        const cached = poseCache.get(cacheKey);
+        currentLandmarks = cached;
+        currentPoseStamp = stamp;
+        lastSentFrame = stamp.source + ':' + stamp.seek + ':' + stamp.time.toFixed(6);
+        renderStage();
+        return;
+      }
       let frameKey = stamp.source + ':' + stamp.seek + ':' + stamp.time.toFixed(6);
       if (isProcessingPose) { pendingPoseFrame = true; return; }
       if (frameKey === lastSentFrame) return;
@@ -1387,8 +1404,20 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         return;
       }
       // 3. 若開啟骨架顯示且有骨架資料，繪製精簡棒球骨架與角度
-      if (showSkeleton && poseMatchesFrame() && currentLandmarks && currentLandmarks.length >= 25) {
-        drawSimplifiedBaseballSkeleton(mainCtx, currentLandmarks, isCurrentLandmarkEstimated);
+      // 播放時優先取用該影格快取，或以透明疊加層即時繪製最近一次推論結果，不覆蓋原生 60fps 影片
+      let renderLandmarks = null;
+      if (showSkeleton) {
+        const cacheKey = getPoseCacheKey(video.currentTime || 0);
+        if (poseCache.has(cacheKey)) {
+          renderLandmarks = poseCache.get(cacheKey);
+        } else if (isPlaying && currentLandmarks && currentPoseStamp && currentPoseStamp.source === sourceGeneration && currentPoseStamp.seek === seekGeneration) {
+          renderLandmarks = currentLandmarks;
+        } else if (poseMatchesFrame() && currentLandmarks) {
+          renderLandmarks = currentLandmarks;
+        }
+      }
+      if (renderLandmarks && renderLandmarks.length >= 25) {
+        drawSimplifiedBaseballSkeleton(mainCtx, renderLandmarks, isCurrentLandmarkEstimated);
       }
 
       // 4. 更新遙測條與時間格計數
@@ -1986,7 +2015,16 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         scrubber.value = Math.min(100, (curTime / effectiveDuration) * 100);
       }
 
-      const telemetryLandmarks = scrubSession && scrubPair ? scrubPair.landmarks : (visiblePlayPair ? visiblePlayPair.landmarks : (poseMatchesFrame() ? currentLandmarks : null));
+      const curCacheKey = getPoseCacheKey(curTime);
+      const telemetryLandmarks = scrubSession && scrubPair
+        ? scrubPair.landmarks
+        : (visiblePlayPair
+          ? visiblePlayPair.landmarks
+          : (poseCache.has(curCacheKey)
+            ? poseCache.get(curCacheKey)
+            : ((isPlaying && currentLandmarks && currentPoseStamp && currentPoseStamp.source === sourceGeneration && currentPoseStamp.seek === seekGeneration)
+              ? currentLandmarks
+              : (poseMatchesFrame() ? currentLandmarks : null))));
       if (!telemetryLandmarks || telemetryLandmarks.length < 25) {
         telTrunkTilt.textContent = '--°'; telTrunkDirection.textContent = '資料不足';
         telLeftElbow.textContent = '--°';
