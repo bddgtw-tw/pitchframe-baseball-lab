@@ -153,8 +153,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     #frameControls button { min-width: 0; padding: 8px 2px; font-size: 12px; justify-content: center; white-space: nowrap; }
     #speedControls { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 4px; padding: 0; background: none; border: 0; }
     #speedControls button { padding: 6px 0; font-size: 12px; border: 1px solid var(--pf-line); }
-    #viewControls { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
-    #viewControls button { justify-content: center; padding: 6px; }
+    #viewControls { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
+    #viewControls button { justify-content: center; padding: 6px 4px; font-size: 12px; white-space: nowrap; }
     #controlPanel button, #exportActions button, body > header button { min-height: 44px; }
     button { transition: background-color .16s, border-color .16s, transform .16s; }
     button:active { transform: translateY(1px); }
@@ -202,9 +202,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       #annotationSection { margin-top: 8px; }
       #annotationSection summary { padding-top: 10px; }
     }
+    @media (max-width: 639px) {
+      body > header { flex-wrap: wrap; gap: 8px; }
+      body > header > div:last-child { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 6px; }
+      body > header > div:last-child button { justify-content: center; padding-left: 8px; padding-right: 8px; white-space: nowrap; }
+    }
     @media (max-width: 359px) {
       #controlPanel { padding: 10px; }
-      body > header { flex-wrap: wrap; gap: 8px; }
       #frameControls { gap: 4px; }
     }
     @media (prefers-reduced-motion: reduce) { button { transition: none; } }
