@@ -2886,12 +2886,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     // pauseVideo(), which renders and otherwise overwrites it with the old time.
     function finishTimelineDrag() {
       isTimelineDragging = false;
+      endScrubSession();
       updateTelemetryAndCounters();
-      observePresentedFrame(); schedulePausedRecovery(); pumpScrubQueue();
+      observePresentedFrame(); schedulePausedRecovery(); triggerPoseInference();
     }
     scrubber.addEventListener('pointerdown', (event) => {
       if (event.button !== undefined && event.button !== 0) return;
-      if (isPoseModelReady) startScrubSession();
       isTimelineDragging = true;
       if (scrubber.setPointerCapture) {
         try { scrubber.setPointerCapture(event.pointerId); } catch (_) {}
@@ -2900,17 +2900,20 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     scrubber.addEventListener('input', () => {
       const percent = Number(scrubber.value);
       if (!(effectiveDuration > 0) || !Number.isFinite(percent)) return;
-      const target = Math.max(0, Math.min(Math.max(0,effectiveDuration-0.000001), percent / 100 * effectiveDuration));
-      if (!isPoseModelReady) {
-        endScrubSession(); isPlaying=false; ++playbackGeneration; video.pause();
-        timelineSeekTarget=target; video.currentTime=target; renderStage(); return;
-      }
-      startScrubSession();
-      timelineSeekTarget = target; scrubQueuedTarget = target;
-      // Do not seek underneath an in-flight inference. The displayed pair stays frozen together.
-      isPlaying=false; ++playbackGeneration; video.pause();
+      const target = Math.max(0, Math.min(Math.max(0, effectiveDuration - 0.000001), percent / 100 * effectiveDuration));
+      endScrubSession();
+      isPlaying = false; ++playbackGeneration; video.pause();
       playIcon.textContent = '▶ 播放';
-      pumpScrubQueue(); renderStage();
+      btnPlayPause.classList.replace('bg-amber-400', 'bg-lime-400');
+      btnPlayPause.classList.replace('hover:bg-amber-300', 'hover:bg-lime-300');
+      timelineSeekTarget = target;
+      invalidatePosePresentation();
+      video.currentTime = target;
+      observePresentedFrame();
+      renderStage();
+      if (!video.seeking) {
+        triggerPoseInference();
+      }
     });
     video.addEventListener('seeked', () => {
       if (timelineSeekTarget !== null && !video.seeking && Math.abs(video.currentTime - timelineSeekTarget) < 0.05) {
