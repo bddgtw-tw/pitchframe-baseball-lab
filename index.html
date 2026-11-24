@@ -147,11 +147,26 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     #scrubber { width: 100%; height: 44px; background: transparent; margin: 0; }
     /* 進度條底色：亮綠色＝骨架已分析完成的範圍 */
     #scrubber { --pf-analyzed: 0%; }
+    #scrubber { --pf-a0: 0%; }
     #scrubber::-webkit-slider-runnable-track { height: 6px; border-radius: 8px;
-      background: linear-gradient(to right, #65a30d var(--pf-analyzed), #334b5b var(--pf-analyzed)); }
+      background: linear-gradient(to right, #334b5b var(--pf-a0), #65a30d var(--pf-a0), #65a30d var(--pf-analyzed), #334b5b var(--pf-analyzed)); }
+    /* 選擇球員提示：只蓋住影片，控制列仍可操作 */
+    #pickOverlay { position: absolute; inset: 0; z-index: 35; cursor: crosshair; touch-action: manipulation; }
+    #pickOverlay.hidden { display: none !important; }
+    #pickHint { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 20px);
+      display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 14px; border-radius: 12px;
+      background: rgba(2, 6, 23, 0.86); border: 1px solid #bef264; color: #f1f5f9; text-align: center; cursor: default; }
+    #pickTitle { font-size: 16px; color: #bef264; }
+    #pickSub { font-size: 13px; color: #cbd5e1; }
+    #btnPickWhole { margin-top: 4px; min-height: 44px; padding: 0 16px; border-radius: 10px; font-size: 14px; font-weight: 600;
+      color: #e2e8f0; background: #1e293b; border: 1px solid #475569; }
+    #analysisPill { position: absolute; left: 10px; top: 10px; z-index: 25; pointer-events: none; padding: 6px 10px; border-radius: 999px;
+      background: rgba(2, 6, 23, 0.82); color: #f1f5f9; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+    #analysisPill.hidden { display: none; }
+    #btnRepick:not(.hidden) { display: flex; }
     #scrubber::-webkit-slider-thumb { margin-top: -6px; }
     #scrubber::-moz-range-track { height: 6px; border-radius: 8px;
-      background: linear-gradient(to right, #65a30d var(--pf-analyzed), #334b5b var(--pf-analyzed)); }
+      background: linear-gradient(to right, #334b5b var(--pf-a0), #65a30d var(--pf-a0), #65a30d var(--pf-analyzed), #334b5b var(--pf-analyzed)); }
     #playbackActions { display: grid; grid-template-columns: minmax(0,1fr); gap: 10px; padding: 0; border: 0; }
     #frameControls { display: grid; grid-template-columns: 1fr 1fr 1.4fr 1fr 1fr; gap: 6px; }
     #frameControls button { min-width: 0; padding: 8px 2px; font-size: 12px; justify-content: center; white-space: nowrap; }
@@ -325,6 +340,17 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         </div>
       </div>
 
+      <!-- 選擇要分析的球員：載入影片後點一下目標球員 -->
+      <div id="pickOverlay" class="hidden" role="dialog" aria-label="選擇要分析的球員">
+        <div id="pickHint">
+          <strong id="pickTitle">點一下要分析的球員</strong>
+          <span id="pickSub">看不到他？先拖時間軸換一格再點</span>
+          <button id="btnPickWhole" type="button">畫面只有他一人</button>
+        </div>
+      </div>
+      <!-- 分析進度直接標在影片上（直式手機也看得到） -->
+      <div id="analysisPill" class="hidden" role="status" aria-live="polite"></div>
+
       <!-- Floating Text Note Input Box (appears on text tool click) -->
       <div id="textInputModal" class="hidden absolute z-40 bg-slate-900 border border-slate-700 p-2.5 rounded-xl shadow-2xl flex items-center gap-2">
         <input type="text" id="textInputContent" placeholder="輸入備註（如：手肘過低）" maxlength="20" class="bg-slate-950 border border-slate-700 text-white text-xs px-2.5 py-1.5 rounded-lg focus:outline-none focus:border-lime-400 w-44">
@@ -398,6 +424,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           <button id="btnToggleAngles" class="bg-lime-400/20 text-lime-300 border border-lime-400/30 text-xs font-semibold px-3 py-2 rounded-lg transition active:scale-95 flex items-center gap-1">
             <span>📐</span>
             <span id="anglesToggleText">隱藏角度</span>
+          </button>
+          <button id="btnRepick" type="button" class="hidden bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg border border-slate-700 transition font-medium items-center justify-center gap-1" style="grid-column:1 / -1">
+            <span>🎯</span>
+            <span>重新選擇球員</span>
           </button>
         </div>
       </div>
@@ -676,6 +706,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       retryPoseButton.hidden = !failed;
       statusDot.className = 'w-2 h-2 rounded-full ' + (failed ? 'bg-rose-400' : 'bg-sky-400');
     }
+    // 查表命中時更新狀態，不再停在「正在更新目前影格」
+    function reportFrameReady(landmarks) {
+      const label = landmarks ? '骨架就緒' : '這一格沒有偵測到球員';
+      if (statusText.textContent === label) return;
+      reportPoseStatus(label, landmarks ? '顯示的是這一格本身的骨架。' : '這一格沒有找到你選的球員，因此不畫骨架。');
+      statusDot.className = 'w-2 h-2 rounded-full ' + (landmarks ? 'bg-emerald-400' : 'bg-slate-500');
+    }
     function withPoseTimeout(promise, milliseconds, message) {
       let timer;
       return Promise.race([promise, new Promise((_, reject) => {
@@ -923,21 +960,30 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       return done;
     }
 
-    function setAnalyzedProgress(fraction) {
-      const pct = Math.max(0, Math.min(100, fraction * 100));
-      scrubber.style.setProperty('--pf-analyzed', `${pct.toFixed(2)}%`);
+    // 進度條：亮綠色＝已分析的範圍（點選球員後是從那一格往前後展開，不一定從 0 開始）
+    function setAnalyzedSpan(startFraction, endFraction) {
+      const clamp = f => Math.max(0, Math.min(100, f * 100));
+      scrubber.style.setProperty('--pf-a0', `${clamp(startFraction).toFixed(2)}%`);
+      scrubber.style.setProperty('--pf-analyzed', `${clamp(endFraction).toFixed(2)}%`);
+    }
+    const analysisPill = document.getElementById('analysisPill');
+    function showPill(text) {
+      analysisPill.textContent = text || '';
+      analysisPill.classList.toggle('hidden', !text);
     }
     function reportAnalysisProgress(job) {
       const pct = Math.floor(job.done / job.total * 100);
-      setAnalyzedProgress(job.done / job.total);
+      showPill(`骨架分析中 ${pct}%`);
       reportPoseStatus(`骨架分析中 ${pct}%`,
         `已分析 ${job.done}／${job.total} 格。進度條亮綠色的範圍已可播放、逐格，骨架與畫面同一格。`);
     }
 
     function cancelTrackAnalysis() {
       trackJob = null;
+      heldSkeleton = null;
       analysisPoseResolver = null;
-      setAnalyzedProgress(0);
+      setAnalyzedSpan(0, 0);
+      showPill('');
     }
     function resetAnalysisVideo() {
       cancelTrackAnalysis();
@@ -945,18 +991,135 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       try { analysisVideo.load(); } catch (_) {}
     }
 
+    /* ---------- 選擇要分析的球員 ---------- */
+    let targetChoice = null; // { source, mode: 'point' | 'full', nx, ny, time }
+    const pickOverlay = document.getElementById('pickOverlay');
+    const pickTitle = document.getElementById('pickTitle');
+    const pickSub = document.getElementById('pickSub');
+    const btnPickWhole = document.getElementById('btnPickWhole');
+    const btnRepick = document.getElementById('btnRepick');
+    function hasTargetChoice() { return !!(targetChoice && targetChoice.source === sourceGeneration); }
+    function showPickOverlay(title, sub) {
+      pickTitle.textContent = title || '點一下要分析的球員';
+      pickSub.textContent = sub || '看不到他？先拖時間軸換一格再點';
+      pickOverlay.classList.remove('hidden');
+      btnRepick.classList.add('hidden');
+      showPill('');
+      reportPoseStatus('請選擇球員', '在影片上點一下要分析的球員；畫面裡只有他一人時可按「畫面只有他一人」。');
+    }
+    function hidePickOverlay() { pickOverlay.classList.add('hidden'); }
+    function chooseTarget(choice) {
+      if (!video.videoWidth || !currentVideoObjectUrl) return;
+      if (isPlaying) pauseVideo(false, false);
+      cancelTrackAnalysis();
+      poseCache.clear();
+      currentLandmarks = null; currentPoseStamp = null; lastSentFrame = null;
+      hasEverDetectedRealPerson = false; smoothedCalloutBox = null;
+      targetChoice = { source: sourceGeneration, ...choice };
+      hidePickOverlay();
+      btnRepick.classList.remove('hidden');
+      showPill(choice.mode === 'point' ? '正在找你點的球員…' : '準備分析…');
+      renderStage();
+      startTrackAnalysis();
+    }
+    pickOverlay.addEventListener('click', (e) => {
+      if (e.target.closest('#pickHint')) return;
+      const rect = mainCanvas.getBoundingClientRect();
+      const cx = (e.clientX - rect.left) * mainCanvas.width / rect.width;
+      const cy = (e.clientY - rect.top) * mainCanvas.height / rect.height;
+      const b = getRenderBounds();
+      if (cx < b.destX || cx > b.destX + b.destW || cy < b.destY || cy > b.destY + b.destH) return; // 點在影片外
+      const p = mapCanvasToVideo(cx, cy);
+      chooseTarget({ mode: 'point', nx: p.x, ny: p.y, time: video.currentTime || 0 });
+    });
+    btnPickWhole.addEventListener('click', (e) => { e.stopPropagation(); chooseTarget({ mode: 'full', time: 0 }); });
+    btnRepick.addEventListener('click', () => {
+      if (!video.videoWidth) return;
+      if (isPlaying) pauseVideo(false, false);
+      cancelTrackAnalysis();
+      poseCache.clear();
+      targetChoice = null; currentLandmarks = null; currentPoseStamp = null;
+      hasEverDetectedRealPerson = false;
+      showPickOverlay();
+      renderStage();
+    });
+
+    /* ---------- 裁切追蹤工具 ---------- */
+    const CROP_EDGE = isMobileDevice ? 384 : 512;
+    let analysisSendBusy = false;
+    async function sendAndWait(engine, image) {
+      analysisSendBusy = true;
+      try {
+        const result = new Promise(resolve => { analysisPoseResolver = resolve; });
+        await withPoseTimeout(engine.send({ image }), 30000, '影格辨識超過 30 秒');
+        return await withPoseTimeout(result, 5000, 'AI 執行完成但未回傳結果');
+      } finally { analysisSendBusy = false; }
+    }
+    // 只送入 box（來源影片像素：中心＋邊長的正方形）範圍，結果換回整張影片的 0..1 座標
+    async function inferCrop(engine, box) {
+      const W = analysisVideo.videoWidth, H = analysisVideo.videoHeight;
+      const side = box.side, sx = box.cx - side / 2, sy = box.cy - side / 2;
+      if (analysisCanvas.width !== CROP_EDGE || analysisCanvas.height !== CROP_EDGE) {
+        analysisCanvas.width = CROP_EDGE; analysisCanvas.height = CROP_EDGE;
+      }
+      analysisCtx.fillStyle = '#000';
+      analysisCtx.fillRect(0, 0, CROP_EDGE, CROP_EDGE);
+      const ix0 = Math.max(0, sx), iy0 = Math.max(0, sy), ix1 = Math.min(W, sx + side), iy1 = Math.min(H, sy + side);
+      if (ix1 > ix0 && iy1 > iy0) {
+        const k = CROP_EDGE / side;
+        analysisCtx.drawImage(analysisVideo, ix0, iy0, ix1 - ix0, iy1 - iy0, (ix0 - sx) * k, (iy0 - sy) * k, (ix1 - ix0) * k, (iy1 - iy0) * k);
+      }
+      const res = await sendAndWait(engine, analysisCanvas);
+      if (!res || !res.poseLandmarks || res.poseLandmarks.length < 25) return null;
+      return res.poseLandmarks.map(p => ({ ...p, x: (sx + p.x * side) / W, y: (sy + p.y * side) / H }));
+    }
+    function landmarkBounds(lm, W, H) {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, n = 0;
+      for (const p of lm) {
+        if (!(p.visibility >= 0.5)) continue;
+        const x = p.x * W, y = p.y * H;
+        x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); n++;
+      }
+      if (n < 6) return null;
+      return { x0, y0, x1, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, size: Math.max(x1 - x0, y1 - y0) };
+    }
+    // 平滑濾波（One Euro）：靜止時去抖動、快速動作時幾乎不延遲；在整張影片的像素座標上做
+    function makeOneEuro(minCutoff = 1.7, beta = 0.005, dCutoff = 1.0) {
+      let prev = null, dPrev = 0;
+      const alpha = (cutoff, dt) => 1 / (1 + 1 / (2 * Math.PI * cutoff * dt));
+      return (x, dt) => {
+        if (prev === null || !(dt > 0)) { prev = x; dPrev = 0; return x; }
+        const d = (x - prev) / dt;
+        dPrev = dPrev + alpha(dCutoff, dt) * (d - dPrev);
+        const cutoff = minCutoff + beta * Math.abs(dPrev);
+        prev = prev + alpha(cutoff, dt) * (x - prev);
+        return prev;
+      };
+    }
+    function makeLandmarkSmoother(W, H) {
+      const filters = Array.from({ length: 33 }, () => [makeOneEuro(), makeOneEuro()]);
+      return (lm, dt) => lm.map((p, i) => {
+        const f = filters[i];
+        if (!f) return p;
+        return { ...p, x: f[0](p.x * W, dt) / W, y: f[1](p.y * H, dt) / H };
+      });
+    }
+
     async function startTrackAnalysis() {
       if (!isPoseModelReady || !pose || frameIndexPending || isExportingVideo) return;
       if (!currentVideoObjectUrl || !(effectiveDuration > 0)) return;
-      if (trackJob && trackJob.source === sourceGeneration) return; // 每支影片只跑一次；失敗後由「重新載入 AI」重來
+      if (!hasTargetChoice()) return; // 先等家長選好要分析的球員
+      if (trackJob && trackJob.source === sourceGeneration) return; // 每次選擇只跑一次
       const source = sourceGeneration, engine = pose, epoch = poseEpoch, url = currentVideoObjectUrl;
+      const choice = targetChoice;
       const frames = buildFrameTimes();
       const job = { source, total: frames.length, done: 0, running: true, complete: false, failed: false };
       trackJob = job;
-      const stale = () => trackJob !== job || source !== sourceGeneration || epoch !== poseEpoch || engine !== pose;
+      const stale = () => trackJob !== job || source !== sourceGeneration || epoch !== poseEpoch || engine !== pose || targetChoice !== choice;
+      const n = frames.length;
       try {
-        // 等目前的即時辨識結束，避免兩個工作共用同一個模型
-        while (isProcessingPose) {
+        // 等目前的即時辨識或上一個分析的送出結束，避免兩個工作共用同一個模型
+        while (isProcessingPose || analysisSendBusy) {
           await new Promise(resolve => setTimeout(resolve, 16));
           if (stale()) return;
         }
@@ -967,25 +1130,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           await loaded;
           if (stale()) return;
         }
-        const scale = Math.min(1, INFERENCE_MAX_EDGE / Math.max(analysisVideo.videoWidth || 1, analysisVideo.videoHeight || 1));
-        analysisCanvas.width = Math.max(1, Math.round((analysisVideo.videoWidth || 1) * scale));
-        analysisCanvas.height = Math.max(1, Math.round((analysisVideo.videoHeight || 1) * scale));
-        // 從乾淨的追蹤狀態開始，之後一格接一格送入
-        await withPoseTimeout(Promise.resolve(engine.reset()), 10000, '模型重設逾時');
+        const W = analysisVideo.videoWidth || 1, H = analysisVideo.videoHeight || 1;
         modelSourceGeneration = source;
-        reportAnalysisProgress(job);
-
-        for (const item of frames) {
-          if (stale()) return;
-          await seekAnalysisVideo(item.seekTime);
-          if (stale()) return;
-          analysisCtx.drawImage(analysisVideo, 0, 0, analysisCanvas.width, analysisCanvas.height);
-          const result = new Promise(resolve => { analysisPoseResolver = resolve; });
-          await withPoseTimeout(engine.send({ image: analysisCanvas }), 30000, '影格辨識超過 30 秒');
-          const results = await withPoseTimeout(result, 5000, 'AI 執行完成但未回傳結果');
-          if (stale()) return;
-          const landmarks = results && results.poseLandmarks && results.poseLandmarks.length >= 25
-            ? results.poseLandmarks.map(p => ({ ...p })) : null;
+        const store = (item, landmarks) => {
           poseCache.set(item.index, landmarks); // 未偵測到人物誠實記為 null
           if (landmarks) hasEverDetectedRealPerson = true;
           job.done++;
@@ -993,10 +1140,99 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
             reportAnalysisProgress(job);
             if (!isPlaying) renderStage();
           }
+        };
+
+        if (choice.mode === 'full') {
+          // 整張畫面：讓模型自己追蹤與平滑
+          await withPoseTimeout(Promise.resolve(engine.setOptions({ smoothLandmarks: true })), 5000, '模型設定逾時');
+          const scale = Math.min(1, INFERENCE_MAX_EDGE / Math.max(W, H));
+          analysisCanvas.width = Math.max(1, Math.round(W * scale));
+          analysisCanvas.height = Math.max(1, Math.round(H * scale));
+          await withPoseTimeout(Promise.resolve(engine.reset()), 10000, '模型重設逾時');
+          reportAnalysisProgress(job);
+          for (let i = 0; i < n; i++) {
+            if (stale()) return;
+            await seekAnalysisVideo(frames[i].seekTime);
+            if (stale()) return;
+            analysisCtx.drawImage(analysisVideo, 0, 0, analysisCanvas.width, analysisCanvas.height);
+            const res = await sendAndWait(engine, analysisCanvas);
+            if (stale()) return;
+            store(frames[i], res && res.poseLandmarks && res.poseLandmarks.length >= 25 ? res.poseLandmarks.map(p => ({ ...p })) : null);
+            setAnalyzedSpan(0, (i + 1) / n);
+          }
+        } else {
+          // 點選球員：只分析他周圍的區域，裁切框每格跟著他移動；平滑改由我們在整張影片座標上做
+          await withPoseTimeout(Promise.resolve(engine.setOptions({ smoothLandmarks: false })), 5000, '模型設定逾時');
+          let i0 = 0, best = Infinity;
+          frames.forEach((f, i) => { const d = Math.abs(f.seekTime - choice.time); if (d < best) { best = d; i0 = i; } });
+          const tapX = choice.nx * W, tapY = choice.ny * H, maxSide = Math.max(W, H) * 1.3;
+          await seekAnalysisVideo(frames[i0].seekTime);
+          if (stale()) return;
+          // 1) 在點的位置試幾種裁切大小，找出「身體範圍包含點擊位置」的那個人
+          let seed = null;
+          for (const f of [0.22, 0.35, 0.55, 0.8, 1.15]) {
+            await withPoseTimeout(Promise.resolve(engine.reset()), 10000, '模型重設逾時');
+            const lm = await inferCrop(engine, { cx: tapX, cy: tapY, side: Math.max(W, H) * f });
+            if (stale()) return;
+            const b = lm && landmarkBounds(lm, W, H);
+            if (!b) continue;
+            const pad = b.size * 0.15;
+            const inside = tapX >= b.x0 - pad && tapX <= b.x1 + pad && tapY >= b.y0 - pad && tapY <= b.y1 + pad;
+            const dist = Math.hypot(b.cx - tapX, b.cy - tapY) / Math.max(1, b.size);
+            const score = (inside ? 0 : 10) + dist;
+            if (!seed || score < seed.score) seed = { score, b };
+            if (inside && dist < 0.6) break;
+          }
+          if (!seed || seed.score >= 10) {
+            trackJob = null; targetChoice = null;
+            showPickOverlay('這裡沒有找到球員', '請點在他身上，或換一格他比較清楚的畫面再點');
+            renderStage();
+            return;
+          }
+          const seedBox = { cx: seed.b.cx, cy: seed.b.cy, side: Math.min(maxSide, Math.max(seed.b.size * 1.6, Math.min(W, H) * 0.12)) };
+          reportAnalysisProgress(job);
+          // 2) 從點選的那一格往後、再往前，各一路追下去
+          const runPass = async (order) => {
+            await withPoseTimeout(Promise.resolve(engine.reset()), 10000, '模型重設逾時');
+            let box = { ...seedBox }, misses = 0, prevTime = null;
+            let smooth = makeLandmarkSmoother(W, H);
+            for (const i of order) {
+              if (stale()) return false;
+              await seekAnalysisVideo(frames[i].seekTime);
+              if (stale()) return false;
+              let lm = await inferCrop(engine, box);
+              if (stale()) return false;
+              const b = lm && landmarkBounds(lm, W, H);
+              // 結果中心離上一格太遠，視為跳到別人身上，不採用
+              if (!b || Math.hypot(b.cx - box.cx, b.cy - box.cy) > box.side * 0.6) lm = null;
+              if (lm) {
+                const dt = prevTime === null ? 0 : Math.abs(frames[i].seekTime - prevTime);
+                lm = smooth(lm, dt);
+                prevTime = frames[i].seekTime;
+                misses = 0;
+                const targetSide = Math.min(maxSide, Math.max(b.size * 1.6, Math.min(W, H) * 0.12));
+                box = { cx: b.cx, cy: b.cy, side: box.side * 0.6 + targetSide * 0.4 };
+              } else {
+                misses++;
+                smooth = makeLandmarkSmoother(W, H); prevTime = null;
+                if (misses <= 20) box = { ...box, side: Math.min(maxSide, box.side * 1.12) };
+                if (misses === 2) await withPoseTimeout(Promise.resolve(engine.reset()), 10000, '模型重設逾時');
+              }
+              store(frames[i], lm);
+              const isBackward = order[0] < i0; // 往前那一趟開始時，往後已全部完成
+              setAnalyzedSpan(isBackward ? i / n : i0 / n, isBackward ? 1 : (i + 1) / n);
+            }
+            return true;
+          };
+          const forward = []; for (let i = i0; i < n; i++) forward.push(i);
+          const backward = []; for (let i = i0 - 1; i >= 0; i--) backward.push(i);
+          if (!(await runPass(forward))) return;
+          if (backward.length && !(await runPass(backward))) return;
         }
         job.running = false;
         job.complete = true;
-        setAnalyzedProgress(1);
+        setAnalyzedSpan(0, 1);
+        showPill('');
         reportPoseStatus('骨架分析完成',
           `整段 ${job.total} 格已分析。播放、慢動作、逐格與拖曳都直接顯示該格骨架${hasEverDetectedRealPerson ? '' : '；但整段都沒有偵測到人物'}。`);
         statusDot.className = 'w-2 h-2 rounded-full bg-emerald-400';
@@ -1006,9 +1242,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         analysisPoseResolver = null;
         job.running = false;
         job.failed = true;
+        showPill('');
         reportPoseStatus('骨架整段分析中斷',
-          String(err.message || err) + '。已完成的部分仍可使用，其餘影格改為即時辨識；可按「重新載入 AI」重試。', true);
-        triggerPoseInference();
+          String(err.message || err) + '。已完成的部分仍可使用；可按「重新選擇球員」或「重新載入 AI」重試。', true);
+      } finally {
+        if (engine === pose && choice.mode === 'point') {
+          try { engine.setOptions({ smoothLandmarks: true }); } catch (_) {}
+        }
       }
     }
 
@@ -1198,11 +1438,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         currentLandmarks = cached;
         currentPoseStamp = stamp;
         lastSentFrame = stamp.source + ':' + stamp.seek + ':' + stamp.time.toFixed(6);
+        if (!isPlaying && !analysisActive()) reportFrameReady(cached);
         renderStage();
         return;
       }
-      // 整段分析進行中：模型由分析工作獨占，尚未分析到的影格先不顯示骨架
-      if (analysisActive()) { renderStage(); return; }
+      // 尚未選擇球員，或整段分析進行中：不做即時辨識，避免畫到別人身上或跟分析搶模型
+      if (!hasTargetChoice() || analysisActive()) { renderStage(); return; }
       let frameKey = stamp.source + ':' + stamp.seek + ':' + stamp.time.toFixed(6);
       if (isProcessingPose) { pendingPoseFrame = true; return; }
       if (frameKey === lastSentFrame) return;
@@ -1285,6 +1526,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
       poseCache.clear();
       resetAnalysisVideo();
+      targetChoice = null; hidePickOverlay(); btnRepick.classList.add('hidden');
       smoothedCalloutBox = null;
       hasEverDetectedRealPerson = false;
       lastValidLandmarks = null;
@@ -1349,6 +1591,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       // 重置狀態
       poseCache.clear();
       cancelTrackAnalysis();
+      targetChoice = null; hidePickOverlay(); btnRepick.classList.add('hidden');
       smoothedCalloutBox = null;
       hasEverDetectedRealPerson = false;
       lastValidLandmarks = null;
@@ -1406,10 +1649,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         video.currentTime = 0;
         pauseVideo();
 
-        // 觸發初始影格分析
-        setTimeout(() => {
-          triggerPoseInference();
-        }, 150);
+        // 先請家長點選要分析的球員，再開始分析
+        showPickOverlay();
       };
 
       video.onerror = (e) => {
@@ -1518,6 +1759,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     /* ==========================================================================
        6. 畫面渲染主迴圈 (Video + 精簡棒球骨架 + 角度標記)
        ========================================================================== */
+    let heldSkeleton = null; // 最後一張「確實顯示在畫面上」的骨架，供跳格解碼期間沿用
     function displayedFrameTime() {
       if (isPlaying && presentedFrame && presentedFrame.source === sourceGeneration
         && presentedFrame.seek === seekGeneration && Number.isFinite(presentedFrame.time)) {
@@ -1557,10 +1799,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       // 3. 若開啟骨架顯示且有骨架資料，繪製精簡棒球骨架與角度
       // 播放時優先取用該影格快取，或以透明疊加層即時繪製最近一次推論結果，不覆蓋原生 60fps 影片
       let renderLandmarks = null;
-      if (showSkeleton && !video.seeking) {
+      if (showSkeleton && video.seeking) {
+        // 拖曳／跳格時影片還停在上一張畫面：繼續畫「那一張畫面」的骨架，不讓骨架消失，也不畫到錯的畫面上
+        if (heldSkeleton && heldSkeleton.source === sourceGeneration) renderLandmarks = heldSkeleton.landmarks;
+      } else if (showSkeleton) {
         // 播放中以「實際呈現在畫面上的那一格」查表，骨架與畫面同格，不超前也不落後
         const cacheKey = getPoseCacheKey(displayedFrameTime());
-        const trackOwnsFrames = analysisActive() || trackComplete();
+        const trackOwnsFrames = analysisActive() || trackComplete() || !hasTargetChoice();
         if (poseCache.has(cacheKey)) {
           renderLandmarks = poseCache.get(cacheKey);
         } else if (trackOwnsFrames) {
@@ -1570,6 +1815,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         } else if (poseMatchesFrame() && currentLandmarks) {
           renderLandmarks = currentLandmarks;
         }
+        heldSkeleton = { source: sourceGeneration, landmarks: renderLandmarks };
       }
       if (renderLandmarks && renderLandmarks.length >= 25) {
         drawSimplifiedBaseballSkeleton(mainCtx, renderLandmarks, isCurrentLandmarkEstimated);
@@ -2753,6 +2999,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       }
       if (isExportingVideo) return;
       if (analysisActive()) { alert('骨架正在整段分析中，完成後即可匯出（不需重新分析）。'); return; }
+      if (showSkeleton && !hasTargetChoice()) { alert('請先在影片上點選要分析的球員。'); return; }
 
       // 1. 偵測瀏覽器真實支援格式（絕不將 WebM 假裝為 MP4）
       let mimeType = 'video/webm';
