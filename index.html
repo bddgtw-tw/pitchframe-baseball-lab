@@ -2,8 +2,24 @@
 <html lang="zh-TW" class="h-full bg-slate-950 text-slate-100">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' blob:; worker-src 'self' blob:; font-src 'self'; base-uri 'none'; form-action 'none'">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <!-- PWA：加到主畫面、全螢幕開啟、離線可用 -->
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#101b27">
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="PitchFrame">
+  <script>
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Service worker 未啟用：', err));
+      });
+    }
+  </script>
   <title>投球逐格｜PitchFrame 同格驗證版</title>
   <!-- Bundled Tailwind CSS 3.4.17 -->
   <script src="./tailwind.js"></script>
@@ -216,6 +232,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       #frameControls { gap: 4px; }
     }
     @media (prefers-reduced-motion: reduce) { button { transition: none; } }
+    /* 主畫面全螢幕開啟時，避開瀏海與底部手勢列 */
+    body > header { padding-top: max(10px, env(safe-area-inset-top)); }
+    main { padding-bottom: max(28px, env(safe-area-inset-bottom)) !important; }
 
   </style>
 </head>
