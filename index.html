@@ -346,7 +346,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           <p class="mt-1 text-xs text-slate-300">側後方固定手機拍一球，確認落地與出手，再把證據分享給教練。</p>
         </div>
         <div class="flex shrink-0 gap-2">
-          <button id="btnInstallApp" type="button" class="hidden items-center text-slate-300 text-xs px-3 py-2">安裝</button>
           <button id="btnShareApp" type="button" class="bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-bold px-3 py-2 rounded-lg border border-slate-600">分享工具</button>
         </div>
       </div>
@@ -774,7 +773,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         <span id="btnExportVideoText">輸出骨架分析影片</span>
       </button>
       <button id="btnExportAI" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-100 text-xs font-semibold px-4 py-2.5 rounded-lg border border-slate-700 transition">
-        <span>下載 AI 教練分析包</span>
+        <span>下載教練／AI 分析包</span>
       </button>
         </div>
       </details>
@@ -884,7 +883,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const btnShareAIText = document.getElementById('btnShareAIText');
     const aiHandoffStatus = document.getElementById('aiHandoffStatus');
     const btnShareApp = document.getElementById('btnShareApp');
-    const btnInstallApp = document.getElementById('btnInstallApp');
     const exportModal = document.getElementById('exportModal');
     const exportFormatNotice = document.getElementById('exportFormatNotice');
     const exportProgressBar = document.getElementById('exportProgressBar');
@@ -3584,36 +3582,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       }
     });
 
-    let deferredInstallPrompt = null;
-    const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
-    const isIosSafari = /iPhone|iPad|iPod/i.test(navigator.userAgent || '') && /Safari/i.test(navigator.userAgent || '') && !/CriOS|FxiOS|EdgiOS/i.test(navigator.userAgent || '');
-    function syncInstallButton() {
-      const show = !isStandalone() && (!!deferredInstallPrompt || isIosSafari);
-      btnInstallApp.classList.toggle('hidden', !show);
-      btnInstallApp.classList.toggle('flex', show);
-    }
-    window.addEventListener('beforeinstallprompt', event => {
-      event.preventDefault();
-      deferredInstallPrompt = event;
-      syncInstallButton();
-    });
-    window.addEventListener('appinstalled', () => {
-      deferredInstallPrompt = null;
-      syncInstallButton();
-    });
-    btnInstallApp.addEventListener('click', async () => {
-      if (isIosSafari) {
-        alert('在 Safari 底部按「分享」圖示，再選「加入主畫面」。之後從主畫面開啟 PitchFrame，就能像 App 一樣全螢幕使用。');
-        return;
-      }
-      if (!deferredInstallPrompt) return;
-      deferredInstallPrompt.prompt();
-      await deferredInstallPrompt.userChoice;
-      deferredInstallPrompt = null;
-      syncInstallButton();
-    });
-    syncInstallButton();
-
     function textMetric(el) { return el && el.textContent ? el.textContent.trim() : '資料不足'; }
     let progressHistory = [];
     try {
@@ -3808,9 +3776,34 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           '本資料不能用來診斷傷害或預測受傷。疼痛、疲勞或控制力下降時應停止投球並諮詢專業人員。'
         ]
       };
-      return `# PitchFrame AI 教練分析包\n\n` +
+      const contextLabels = {
+        handedness: { right: '右投', left: '左投', unknown: '未設定' },
+        cameraView: { side: '正側面', 'side-rear': '側後方', rear: '正後方', front: '正前方', unknown: '未設定' },
+        surface: { mound: '投手丘', 'flat-ground': '平地', unknown: '未設定' },
+        condition: { normal: '正常', fatigued: '明顯疲勞', pain: '疼痛／不適', unknown: '未設定' }
+      };
+      const eventSourceLabel = source => source === 'manual' ? '人工確認' : source === 'automatic-estimate' ? '系統估計，請人工確認' : '未確認';
+      const timeLabel = value => Number.isFinite(value) ? `${value.toFixed(3)} 秒` : '未確認';
+      const phaseLabel = currentComparison?.events?.footStrikeToReleaseMilliseconds;
+      const packageReady = contextComplete && qualityCoreReady && poseCoverage.readyForAutomatedSummary;
+      const readinessLabel = packageReady
+        ? '資料達到目前的自動摘要門檻；仍需教練查看原始畫面。'
+        : '資料尚未達到自動摘要門檻；先補齊設定、確認事件或重拍，不應直接下動作結論。';
+      const coveragePercent = poseCoverage.detectedRatio === null ? null : Math.round(poseCoverage.detectedRatio * 100);
+      const coachSummary = `## 給教練的快速摘要\n\n` +
+        `- 匿名球員：${analysisContext.athleteSlot || 'A'}｜年齡層：${analysisContext.ageGroup === 'unknown' ? '未設定' : analysisContext.ageGroup}｜投球手：${contextLabels.handedness[analysisContext.handedness] || '未設定'}\n` +
+        `- 拍攝：${contextLabels.cameraView[analysisContext.cameraView] || '未設定'}｜${contextLabels.surface[analysisContext.surface] || '未設定'}｜當天狀況：${contextLabels.condition[analysisContext.condition] || '未設定'}\n` +
+        `- 前腳落地：${timeLabel(data.estimatedEvents.footStrikeSeconds)}（${eventSourceLabel(data.estimatedEvents.footStrikeSource)}）\n` +
+        `- 出手：${timeLabel(data.estimatedEvents.ballReleaseSeconds)}（${eventSourceLabel(data.estimatedEvents.ballReleaseSource)}）\n` +
+        `- 落地到出手：${Number.isFinite(phaseLabel) ? `${phaseLabel} 毫秒` : '資料不足'}\n` +
+        `- 骨架覆蓋：${poseCoverage.analyzedFrames ? `${coveragePercent}%（${poseCoverage.detectedFrames}/${poseCoverage.analyzedFrames} 個取樣點）` : '尚無完整分析'}\n` +
+        `- 單機位旋轉差觀察：${separationObservation}（不是角度、分數、球速、動力傳遞效率或傷害風險）\n` +
+        `- 資料判定：${readinessLabel}\n\n` +
+        `請先查看落地前一格、落地格、出手格或原始影片，再決定是否值得提出一個可重拍驗證的觀察線索。\n\n`;
+      return `# PitchFrame 教練／AI 分析包\n\n` +
         `> 目的：協助家長、球員與教練根據同一段影片提出可驗證的觀察。這不是醫療診斷或自動姿勢評分。\n\n` +
-        `## 給 AI 的任務\n\n請先檢查資料品質、拍攝視角、年齡層與限制。若 analysisReadiness.poseCoverage.readyForAutomatedSummary 不是 true，先說明資料不足並要求補拍或人工確認，不得提出動作修正。資料足夠時，再依「下肢承接 → 骨盆 → 上軀幹 → 手臂 → 出手」的順序分析。每一項建議都要引用具體時間點或數值，區分【觀察】【推論】【待確認】。只有 comparison.sameContext 為 true，且錄影距離、角度與影格率可比較時，才能描述前後變化；否則不得宣稱進步或退步。髖肩分離欄位只是單機位模型的相對趨勢，不得解讀為越大越好、動力傳遞效率、球速或傷害風險。不要只因單一角度或單次投球判定好壞；不要給疼痛診斷。若 condition 是 pain 或 fatigued，先建議停止高強度投球、告知成人並尋求適當專業評估，不要把疲勞或疼痛直接改寫成技術缺陷。最後只提出 1 個最值得優先驗證的觀察線索，以及下次應如何用同角度重拍驗證；不要僅憑本分析包開立加重量、最大強度、增加投球量或強迫增加軀幹扭轉的訓練。若沒有附關鍵畫面或影片，請先要求使用者補上，不要假裝看過。\n\n` +
+        coachSummary +
+        `## 給 AI 的任務\n\n請先檢查資料品質、拍攝視角、年齡層與限制。若 analysisReadiness.contextComplete、captureQuality.coreReady 或 analysisReadiness.poseCoverage.readyForAutomatedSummary 任一不是 true，先說明資料不足並要求補拍或人工確認，不得提出動作修正。資料足夠時，再依「下肢承接 → 骨盆 → 上軀幹 → 手臂 → 出手」的順序分析。每一項建議都要引用具體時間點或數值，區分【觀察】【推論】【待確認】。只有 comparison.sameContext 為 true，且錄影距離、角度與影格率可比較時，才能描述前後變化；否則不得宣稱進步或退步。髖肩分離欄位只是單機位模型的相對趨勢，不得解讀為越大越好、動力傳遞效率、球速或傷害風險。不要只因單一角度或單次投球判定好壞；不要給疼痛診斷。若 condition 是 pain 或 fatigued，先建議停止高強度投球、告知成人並尋求適當專業評估，不要把疲勞或疼痛直接改寫成技術缺陷。最後只提出 1 個最值得優先驗證的觀察線索，以及下次應如何用同角度重拍驗證；不要僅憑本分析包開立加重量、最大強度、增加投球量或強迫增加軀幹扭轉的訓練。若沒有附關鍵畫面或影片，請先要求使用者補上，不要假裝看過。\n\n` +
         `## 結構化資料\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\`\n\n` +
         `## 建議一起提供\n\n- 前腳落地前一格、落地格、出手格的 PNG\n- 原始影片或 PitchFrame 匯出的骨架影片\n- 投手慣用手、年齡層、這次是平地或投手丘\n- 當天是否疼痛或明顯疲勞（若有，先停止投球並尋求專業評估）\n`;
     }
@@ -3821,7 +3814,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `PitchFrame_AI分析包_${new Date().toISOString().slice(0, 10)}.md`;
+      link.download = `PitchFrame_教練AI分析包_${new Date().toISOString().slice(0, 10)}.md`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
@@ -3829,14 +3822,14 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     btnShareAI.addEventListener('click', async () => {
       if (!video.videoWidth) { alert('請先載入並分析一段投球影片。'); return; }
       const content = aiAnalysisPackage();
-      const fileName = `PitchFrame_AI分析包_${new Date().toISOString().slice(0, 10)}.md`;
+      const fileName = `PitchFrame_教練AI分析包_${new Date().toISOString().slice(0, 10)}.md`;
       btnShareAI.disabled = true;
       btnShareAIText.textContent = '準備分享…';
       aiHandoffStatus.textContent = '';
       try {
         const file = new File([content], fileName, { type: 'text/markdown;charset=utf-8' });
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({ title: 'PitchFrame AI 教練分析包', text: '請先閱讀資料品質與限制，再根據關鍵時間點提供建議。', files: [file] });
+          await navigator.share({ title: 'PitchFrame 教練／AI 分析包', text: '內含教練快速摘要、資料品質與限制；請查看關鍵畫面後再提供建議。', files: [file] });
           aiHandoffStatus.textContent = '已開啟分享選單；實際接收對象由你決定。';
         } else if (navigator.clipboard && window.isSecureContext) {
           await navigator.clipboard.writeText(content);
@@ -3847,8 +3840,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       } catch (err) {
         if (err && err.name === 'AbortError') aiHandoffStatus.textContent = '已取消分享，資料沒有傳出。';
         else {
-          aiHandoffStatus.textContent = '無法直接分享，請改用「下載 AI 教練分析包」。';
-          alert('此瀏覽器無法直接分享或複製，請改用「下載 AI 教練分析包」。');
+          aiHandoffStatus.textContent = '無法直接分享，請改用「下載教練／AI 分析包」。';
+          alert('此瀏覽器無法直接分享或複製，請改用「下載教練／AI 分析包」。');
         }
       } finally {
         btnShareAI.disabled = false;

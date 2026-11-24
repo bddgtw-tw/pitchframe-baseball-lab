@@ -18,7 +18,7 @@ const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(match => match[1]);
 const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
 if (duplicates.length) fail(`Duplicate HTML ids: ${duplicates.join(', ')}`);
 
-for (const requiredId of ['videoPlayer', 'scrubber', 'sessionSetup', 'sessionSetupStatus', 'viewSettings', 'moreExports', 'progressSection', 'btnExportPNG', 'btnExportVideo', 'btnExportAI', 'btnShareAI', 'aiHandoffStatus', 'btnShareApp', 'btnInstallApp', 'ctxAthleteSlot', 'ctxHandedness', 'ctxAgeGroup', 'ctxCameraView', 'ctxSurface', 'ctxCondition', 'contextReadiness', 'qualityFullBody', 'qualityStable', 'qualitySinglePitch', 'qualityComparable', 'captureQualityBadge', 'analysisCoverage', 'btnMarkFoot', 'btnMarkRelease', 'btnResetEvents', 'btnSaveBaseline', 'btnClearBaselines', 'progressList']) {
+for (const requiredId of ['videoPlayer', 'scrubber', 'sessionSetup', 'sessionSetupStatus', 'viewSettings', 'moreExports', 'progressSection', 'btnExportPNG', 'btnExportVideo', 'btnExportAI', 'btnShareAI', 'aiHandoffStatus', 'btnShareApp', 'ctxAthleteSlot', 'ctxHandedness', 'ctxAgeGroup', 'ctxCameraView', 'ctxSurface', 'ctxCondition', 'contextReadiness', 'qualityFullBody', 'qualityStable', 'qualitySinglePitch', 'qualityComparable', 'captureQualityBadge', 'analysisCoverage', 'btnMarkFoot', 'btnMarkRelease', 'btnResetEvents', 'btnSaveBaseline', 'btnClearBaselines', 'progressList']) {
   if (!ids.includes(requiredId)) fail(`Required control is missing: ${requiredId}`);
 }
 for (const requiredBehavior of [
@@ -49,7 +49,7 @@ for (const samplingBehavior of ['const ANALYSIS_SAMPLE_FPS = 8', 'sampledKeys: f
 for (const eventSyncBehavior of ['function currentManualEventKey()', 'poseMatchesFrame() ? currentPoseStamp : frameStamp()', 'manualRelease = currentManualEventKey()', 'sepCache = null; renderStage(); renderAnalysisCoverage()']) {
   if (!html.includes(eventSyncBehavior)) fail(`Manual event/frame synchronization is missing: ${eventSyncBehavior}`);
 }
-for (const blockingBehavior of ['src="./tailwind.js"', "addEventListener('DOMContentLoaded', initMediaPipe)", 'user-scalable=no']) {
+for (const blockingBehavior of ['src="./tailwind.js"', "addEventListener('DOMContentLoaded', initMediaPipe)", 'user-scalable=no', 'btnInstallApp', 'beforeinstallprompt']) {
   if (html.includes(blockingBehavior)) fail(`Blocking or inaccessible startup behavior remains: ${blockingBehavior}`);
 }
 for (const scienceGuard of ['不能據此要求孩子增加扭轉', '不得解讀為越大越好', 'PMC9532595', 'pitchframe-analysis-package-v2', 'validatedPhysicalMeasurement: false']) {
@@ -76,7 +76,7 @@ if (analysisSchema.properties?.analysisReadiness?.properties?.poseCoverage?.prop
 for (const pilotGate of ['5 分鐘內完成', '至少收集 3 位家長與 2 位教練', '可以刪除或收起']) {
   if (!pilot.includes(pilotGate)) fail(`Parent/coach validation gate is missing: ${pilotGate}`);
 }
-for (const handoffBehavior of ['navigator.canShare({ files: [file] })', 'navigator.clipboard.writeText(content)', "err.name === 'AbortError'"]) {
+for (const handoffBehavior of ['給教練的快速摘要', 'contextComplete && qualityCoreReady && poseCoverage.readyForAutomatedSummary', 'navigator.canShare({ files: [file] })', 'navigator.clipboard.writeText(content)', "err.name === 'AbortError'"]) {
   if (!html.includes(handoffBehavior)) fail(`AI handoff behavior is missing: ${handoffBehavior}`);
 }
 
