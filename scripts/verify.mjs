@@ -18,7 +18,7 @@ const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(match => match[1]);
 const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
 if (duplicates.length) fail(`Duplicate HTML ids: ${duplicates.join(', ')}`);
 
-for (const requiredId of ['captureView', 'workView', 'resultPanel', 'videoPlayer', 'scrubber', 'btnEmptyCapture', 'btnEmptyChoose', 'btnPlayPause', 'btnSlow', 'btnJumpFoot', 'btnJumpRelease', 'btnMarkFoot', 'btnMarkRelease', 'btnShareResult', 'btnExportVideo', 'btnShareAI', 'aiHandoffStatus', 'btnShareApp', 'analysisCoverage']) {
+for (const requiredId of ['captureView', 'workView', 'resultPanel', 'videoPlayer', 'scrubber', 'btnEmptyCapture', 'btnEmptyChoose', 'btnPlayPause', 'speedControls', 'btnJumpFoot', 'btnJumpRelease', 'btnMarkFoot', 'btnMarkRelease', 'btnShareResult', 'btnExportVideo', 'btnShareAI', 'aiHandoffStatus', 'btnShareApp', 'analysisCoverage']) {
   if (!ids.includes(requiredId)) fail(`Required control is missing: ${requiredId}`);
 }
 for (const qualityBehavior of ['analysisCoverageSnapshot', 'operationalThreshold = 0.8', 'readyForAutomatedSummary', '80% 是 PitchFrame 的保守操作門檻']) {
@@ -28,6 +28,10 @@ for (const qualityBehavior of ['analysisCoverageSnapshot', 'operationalThreshold
 for (const stepBehavior of ['<body data-step="capture">', "setStep('analyze')", "setStep('result')", "setStep('capture')",
   'body[data-step="capture"] #captureView', 'body:not([data-step="result"]) #resultPanel', '拍攝投球', '分享結果圖給教練']) {
   if (!html.includes(stepBehavior)) fail(`Three-step flow behavior is missing: ${stepBehavior}`);
+}
+// Parents asked for the fine slow-motion steps; keep all five.
+for (const rate of ['0.1', '0.25', '0.5', '0.75', '1']) {
+  if (!html.includes(`data-rate="${rate}"`)) fail(`Playback speed option is missing: ${rate}x`);
 }
 for (const resultImageBehavior of ['async function buildResultImage()', "type: 'image/png'", 'navigator.canShare({ files: [file] })']) {
   if (!html.includes(resultImageBehavior)) fail(`Shareable result image is missing: ${resultImageBehavior}`);
@@ -44,11 +48,11 @@ for (const samplingBehavior of ['const ANALYSIS_SAMPLE_FPS = 8', 'sampledKeys: f
 for (const eventSyncBehavior of ['function currentManualEventKey()', 'poseMatchesFrame() ? currentPoseStamp : frameStamp()', 'manualRelease = currentManualEventKey()', 'sepCache = null; renderStage(); renderAnalysisCoverage()', 'function updateEventChips(sep)']) {
   if (!html.includes(eventSyncBehavior)) fail(`Manual event/frame synchronization is missing: ${eventSyncBehavior}`);
 }
-for (const blockingBehavior of ['src="./tailwind.js"', "addEventListener('DOMContentLoaded', initMediaPipe)", 'user-scalable=no', 'btnInstallApp', 'beforeinstallprompt', 'btnSmooth', 'blendCanvas', 'sessionSetup', 'btnPrev5', 'btnNext5', 'data-speed="0.1"', 'data-speed="0.75"', 'btnCapture', 'btnChoose', 'telemetryGrid', 'currentFrame: {', 'ctxHandedness', 'qualityFullBody', 'progressSection', 'pf-progress-history', 'athleteContext:', 'captureQuality:', 'comparison: {']) {
+for (const blockingBehavior of ['src="./tailwind.js"', "addEventListener('DOMContentLoaded', initMediaPipe)", 'user-scalable=no', 'btnInstallApp', 'beforeinstallprompt', 'btnSmooth', 'blendCanvas', 'sessionSetup', 'btnPrev5', 'btnNext5', 'btnCapture', 'btnChoose', 'telemetryGrid', 'currentFrame: {', 'ctxHandedness', 'qualityFullBody', 'progressSection', 'pf-progress-history', 'athleteContext:', 'captureQuality:', 'comparison: {']) {
   if (html.includes(blockingBehavior)) fail(`Blocking or inaccessible startup behavior remains: ${blockingBehavior}`);
 }
 // Removed on purpose to keep the parent flow to capture -> analyze -> result. Do not bring these back without a usage reason.
-for (const removedUi of ['pitchframe.css', 'tailwind', 'drawCanvas', 'annotationToolbar', 'sepTintCanvas', 'sepStrip', 'sepPanel', 'viewSettings', 'speed-btn', 'btnLoop', 'btnResetEvents', 'btnExportPNG', 'moreExports', 'parentGuide']) {
+for (const removedUi of ['pitchframe.css', 'tailwind', 'drawCanvas', 'annotationToolbar', 'sepTintCanvas', 'sepStrip', 'sepPanel', 'viewSettings', 'btnLoop', 'btnResetEvents', 'btnExportPNG', 'moreExports', 'parentGuide']) {
   if (html.includes(removedUi)) fail(`Removed UI came back: ${removedUi}`);
 }
 for (const scienceGuard of ['不是評分或醫療判斷', '不得解讀為越大越好', 'pitchframe-analysis-package-v2', 'validatedPhysicalMeasurement: false']) {

@@ -192,11 +192,16 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     body:not([data-step="analyze"]) #analyzeHint { display: none; }
 
     /* Step 3 結果 */
-    #transport { display: grid; grid-template-columns: 1fr 1.4fr 1fr 1fr; gap: 8px; margin-top: 4px; }
+    #transport { display: grid; grid-template-columns: 1fr 1.4fr 1fr; gap: 8px; margin-top: 4px; }
     #transport button { min-height: 52px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line);
       font-size: 15px; font-weight: 700; touch-action: none; user-select: none; -webkit-user-select: none; }
     #btnPlayPause { background: var(--accent) !important; color: var(--accent-ink); border-color: transparent !important; }
-    #btnSlow[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+    /* 播放速度：一排五段，手機上一手按得到 */
+    #speedControls { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; margin-top: 8px; padding: 4px;
+      border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+    #speedControls button { min-height: 40px; border-radius: 9px; font-size: 14px; font-weight: 700; color: var(--muted);
+      font-variant-numeric: tabular-nums; }
+    #speedControls button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
     .hold-active { box-shadow: 0 0 0 2px var(--accent); }
     .section-label { margin: 20px 0 8px; font-size: 14px; font-weight: 700; color: var(--muted); }
     #keyFrames { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -308,7 +313,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           <button id="btnPrev1" type="button" title="上一格（按住連續）">−1 格</button>
           <button id="btnPlayPause" type="button"><span id="playIcon">▶ 播放</span></button>
           <button id="btnNext1" type="button" title="下一格（按住連續）">+1 格</button>
-          <button id="btnSlow" type="button" aria-pressed="false">慢動作</button>
+        </div>
+        <div id="speedControls" role="group" aria-label="播放速度">
+          <button type="button" data-rate="0.1" aria-pressed="false">0.1×</button>
+          <button type="button" data-rate="0.25" aria-pressed="false">0.25×</button>
+          <button type="button" data-rate="0.5" aria-pressed="false">0.5×</button>
+          <button type="button" data-rate="0.75" aria-pressed="false">0.75×</button>
+          <button type="button" data-rate="1" aria-pressed="true">1×</button>
         </div>
 
         <p class="section-label">關鍵兩格（點一下跳過去）</p>
@@ -367,7 +378,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const playIcon = document.getElementById('playIcon');
     const btnPrev1 = document.getElementById('btnPrev1');
     const btnNext1 = document.getElementById('btnNext1');
-    const btnSlow = document.getElementById('btnSlow');
+    const speedControls = document.getElementById('speedControls');
     const scrubber = document.getElementById('scrubber');
     const timeCurrent = document.getElementById('timeCurrent');
     const timeDuration = document.getElementById('timeDuration');
@@ -2310,7 +2321,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       clearPlaybackPair(); seedPlaybackPair();
       const playbackToken = ++playbackGeneration;
       const playbackSource = sourceGeneration;
-      video.playbackRate = currentSpeed;
+      try { video.playbackRate = currentSpeed; } catch (_) {}
       video.play().then(() => {
         if (playbackToken !== playbackGeneration || playbackSource !== sourceGeneration) return;
         isPlaying = true;
@@ -2691,7 +2702,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         activeExportStreams = [];
       }
       video.muted = exportOriginalMuted;
-      video.playbackRate = currentSpeed;
+      try { video.playbackRate = currentSpeed; } catch (_) {}
       isExportingVideo = false;
       exportModal.classList.add('hidden');
       if (keepPaused) {
@@ -3130,11 +3141,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     window.addEventListener('pointerup', finishTimelineDrag);
     window.addEventListener('pointercancel', finishTimelineDrag);
 
-    // 慢動作：一顆開關，1× ↔ 0.25×
-    btnSlow.addEventListener('click', () => {
-      currentSpeed = currentSpeed === 1 ? 0.25 : 1;
-      video.playbackRate = currentSpeed;
-      btnSlow.setAttribute('aria-pressed', String(currentSpeed !== 1));
+    // 播放速度：0.1× 到 1×
+    speedControls.addEventListener('click', (e) => {
+      const button = e.target.closest('button[data-rate]');
+      if (!button) return;
+      currentSpeed = Number(button.dataset.rate);
+      try { video.playbackRate = currentSpeed; } catch (_) { /* 少數瀏覽器不支援極慢速，維持原速度 */ }
+      speedControls.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b === button)));
     });
 
     // 點影片畫面：顯示／隱藏骨架
