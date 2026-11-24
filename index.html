@@ -334,6 +334,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       <!-- Native video: original decoded frame, contained without cropping -->
       <video id="videoPlayer" playsinline webkit-playsinline crossorigin="anonymous" tabindex="-1" aria-label="原始影片完整畫面"></video>
 
+      <!-- Slow-motion blend layer: crossfades two real decoded frames (≤0.5× only); never draws skeleton -->
+      <canvas id="blendCanvas" class="absolute inset-0 w-full h-full pointer-events-none" style="z-index:5; display:none" aria-hidden="true"></canvas>
+
       <!-- Transparent Canvas (simplified baseball skeleton + dynamic angle badges) -->
       <canvas id="mainCanvas" class="absolute inset-0 w-full h-full object-contain pointer-events-none z-10"></canvas>
 
@@ -435,6 +438,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           <button id="btnLoop" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-400 text-xs px-2.5 py-2 rounded-lg border border-slate-700 transition font-medium flex items-center gap-1" title="循環播放開關">
             <span>🔁</span>
             <span id="loopStatusText">循環: 開</span>
+          </button>
+          <button id="btnSmooth" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-400 text-xs px-2.5 py-2 rounded-lg border border-slate-700 transition font-medium flex items-center gap-1" title="慢動作補間：0.5× 以下播放時，前後兩個真實影格之間淡入淡出，畫面較順；骨架與角度只畫在當下為主的那一格真實影格上">
+            <span>〰</span>
+            <span id="smoothStatusText">補間: 開</span>
           </button>
           <button id="btnToggleSkeleton" class="bg-lime-400/20 text-lime-300 border border-lime-400/30 text-xs font-semibold px-3 py-2 rounded-lg transition active:scale-95 flex items-center gap-1">
             <span>🦴</span>
@@ -640,6 +647,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const btnNext5 = document.getElementById('btnNext5');
     const btnLoop = document.getElementById('btnLoop');
     const loopStatusText = document.getElementById('loopStatusText');
+    const btnSmooth = document.getElementById('btnSmooth');
+    const smoothStatusText = document.getElementById('smoothStatusText');
+    const blendCanvas = document.getElementById('blendCanvas');
+    const blendCtx = blendCanvas.getContext('2d');
     const scrubber = document.getElementById('scrubber');
     const timeCurrent = document.getElementById('timeCurrent');
     const timeDuration = document.getElementById('timeDuration');
@@ -1692,6 +1703,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         mainCanvas.height = h;
         drawCanvas.width = w;
         drawCanvas.height = h;
+        blendCanvas.width = w;
+        blendCanvas.height = h;
       }
       renderStage();
       renderAnnotations();
@@ -1780,12 +1793,121 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
        ========================================================================== */
     let heldSkeleton = null; // 最後一張「確實顯示在畫面上」的骨架，供跳格解碼期間沿用
     function displayedFrameTime() {
+      const blend = smoothBlendState();
+      if (blend) return (blend.t < 0.5 ? blend.prev : blend.cur).time;
       if (isPlaying && presentedFrame && presentedFrame.source === sourceGeneration
         && presentedFrame.seek === seekGeneration && Number.isFinite(presentedFrame.time)) {
         return presentedFrame.time;
       }
       return video.currentTime || 0;
     }
+
+    /* ==========================================================================
+       慢動作補間（0.5× 以下）
+       - 30fps 影片放 0.25× 只剩每秒 7.5 格，畫面一頓一頓。這裡把「前一格」與「目前這格」
+         兩張真實解碼畫面依時間淡入淡出，畫面看起來連續。
+       - 只混合影像，不插值骨架：骨架與角度一律查表畫在「當下佔比較大的那一格真實影格」上，
+         符合「骨架與畫面同一格、不捏造」。
+       - 代價：畫面比原生影片晚最多一格（0.25× 時約 0.13 秒）。暫停、拖曳、逐格、匯出時完全不介入。
+       ========================================================================== */
+    const BLEND_MAX_RATE = 0.5;
+    let smoothBlendEnabled = true;
+    try { smoothBlendEnabled = localStorage.getItem('pf-smooth-blend') !== '0'; } catch (_) {}
+    const blendFramePool = [document.createElement('canvas'), document.createElement('canvas'), document.createElement('canvas')];
+    let blendCursor = 0, blendPrev = null, blendCur = null;
+    let blendRaf = null, blendCallback = null, blendVisible = false;
+
+    function sourceFrameDurationAt(time) {
+      if (sourceFrameIndex) {
+        const d = sourceFrameIndex.durations[sourceFrameIndex.frameAt(time)];
+        if (d > 0) return d;
+      }
+      return fallbackFrameDuration;
+    }
+    function smoothBlendWanted() {
+      return smoothBlendEnabled && isPlaying && !video.paused && !scrubSession && !isExportingVideo
+        && video.playbackRate > 0 && video.playbackRate <= BLEND_MAX_RATE && video.videoWidth > 0
+        && typeof video.requestVideoFrameCallback === 'function';
+    }
+    function smoothBlendPair() {
+      if (!blendPrev || !blendCur || video.seeking) return null;
+      if (blendPrev.source !== sourceGeneration || blendCur.source !== sourceGeneration
+        || blendPrev.seek !== seekGeneration || blendCur.seek !== seekGeneration) return null;
+      const t = Math.max(0, Math.min(1, (performance.now() - blendCur.arrivedAt) / blendCur.interval));
+      return { prev: blendPrev, cur: blendCur, t };
+    }
+    function smoothBlendState() { return blendVisible ? smoothBlendPair() : null; }
+    function hideSmoothBlend() {
+      if (blendVisible) { blendCanvas.style.display = 'none'; blendVisible = false; }
+    }
+    function stopSmoothBlend() {
+      if (blendRaf !== null) cancelAnimationFrame(blendRaf);
+      if (blendCallback !== null && video.cancelVideoFrameCallback) video.cancelVideoFrameCallback(blendCallback);
+      blendRaf = null; blendCallback = null; blendPrev = null; blendCur = null;
+      hideSmoothBlend();
+    }
+    function captureBlendFrame(now, metadata) {
+      blendCallback = null;
+      if (!smoothBlendWanted()) { stopSmoothBlend(); return; }
+      if (video.readyState >= 2 && !video.seeking && Number.isFinite(metadata.mediaTime)) {
+        blendCursor = (blendCursor + 1) % blendFramePool.length;
+        const canvas = blendFramePool[blendCursor];
+        const b = getRenderBounds(blendCanvas);
+        const w = Math.max(1, Math.round(Math.min(b.destW, video.videoWidth)));
+        const h = Math.max(1, Math.round(Math.min(b.destH, video.videoHeight)));
+        if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+        canvas.getContext('2d').drawImage(video, 0, 0, w, h);
+        const frame = { canvas, time: metadata.mediaTime, source: sourceGeneration, seek: seekGeneration,
+          arrivedAt: performance.now(),
+          interval: Math.max(16, sourceFrameDurationAt(metadata.mediaTime) / video.playbackRate * 1000) };
+        const continues = blendCur && blendCur.source === frame.source && blendCur.seek === frame.seek && frame.time > blendCur.time;
+        blendPrev = continues ? blendCur : frame;
+        blendCur = frame;
+      }
+      blendCallback = video.requestVideoFrameCallback(captureBlendFrame);
+    }
+    function drawSmoothBlend() {
+      blendRaf = null;
+      if (!smoothBlendWanted()) { stopSmoothBlend(); renderStage(); return; }
+      const pair = smoothBlendPair();
+      if (!pair) {
+        if (blendVisible) { hideSmoothBlend(); renderStage(); }
+      } else {
+        const cw = blendCanvas.width, ch = blendCanvas.height;
+        const b = getRenderBounds(blendCanvas);
+        blendCtx.globalAlpha = 1;
+        blendCtx.fillStyle = '#000'; blendCtx.fillRect(0, 0, cw, ch);
+        blendCtx.drawImage(pair.prev.canvas, b.destX, b.destY, b.destW, b.destH);
+        if (pair.cur !== pair.prev && pair.t > 0) {
+          blendCtx.globalAlpha = pair.t;
+          blendCtx.drawImage(pair.cur.canvas, b.destX, b.destY, b.destW, b.destH);
+          blendCtx.globalAlpha = 1;
+        }
+        if (!blendVisible) { blendCanvas.style.display = 'block'; blendVisible = true; }
+        renderStage(); // 骨架跟著佔比較大的那一格真實影格
+      }
+      blendRaf = requestAnimationFrame(drawSmoothBlend);
+    }
+    function startSmoothBlend() {
+      if (!smoothBlendWanted()) { stopSmoothBlend(); return; }
+      if (blendCallback === null) blendCallback = video.requestVideoFrameCallback(captureBlendFrame);
+      if (blendRaf === null) blendRaf = requestAnimationFrame(drawSmoothBlend);
+    }
+    function syncSmoothButton() {
+      smoothStatusText.textContent = `補間: ${smoothBlendEnabled ? '開' : '關'}`;
+      btnSmooth.classList.toggle('text-lime-300', smoothBlendEnabled);
+      btnSmooth.classList.toggle('text-slate-400', !smoothBlendEnabled);
+    }
+    syncSmoothButton();
+    btnSmooth.addEventListener('click', () => {
+      smoothBlendEnabled = !smoothBlendEnabled;
+      try { localStorage.setItem('pf-smooth-blend', smoothBlendEnabled ? '1' : '0'); } catch (_) {}
+      syncSmoothButton();
+      if (smoothBlendEnabled) startSmoothBlend(); else { stopSmoothBlend(); renderStage(); }
+    });
+    video.addEventListener('playing', () => { if (isPlaying) startSmoothBlend(); });
+    video.addEventListener('seeked', () => { if (isPlaying) startSmoothBlend(); });
+    video.addEventListener('ratechange', () => { if (isPlaying) startSmoothBlend(); });
 
     function renderStage() {
       if (!mainCanvas.width || !mainCanvas.height) return;
@@ -2498,6 +2620,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       video.play().then(() => {
         if (playbackToken !== playbackGeneration || playbackSource !== sourceGeneration) return;
         isPlaying = true;
+        startSmoothBlend();
         playIcon.textContent = "⏸ 暫停";
         btnPlayPause.classList.replace('bg-lime-400', 'bg-amber-400');
         btnPlayPause.classList.replace('hover:bg-lime-300', 'hover:bg-amber-300');
@@ -2513,6 +2636,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       ++playbackGeneration;
       isPlaying = false;
       video.pause();
+      stopSmoothBlend();
       playIcon.textContent = "▶ 播放";
       btnPlayPause.classList.replace('bg-amber-400', 'bg-lime-400');
       btnPlayPause.classList.replace('hover:bg-amber-300', 'hover:bg-lime-300');
