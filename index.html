@@ -219,13 +219,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     #resultsHeader { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 16px; }
     #resultsHeading { font-size: 15px; font-weight: 700; }
     #timeFrameBadge { color: var(--pf-muted); font: 12px ui-monospace, monospace; }
-    #telemetryGrid { gap: 0; grid-template-columns: 1fr; }
-    #telemetryGrid[hidden] { display: none !important; }
-    #telemetryGrid > div { padding: 10px 0; border: 0; border-bottom: 1px solid #203342; border-radius: 0;
-      background: transparent; display: flex; flex-direction: row; align-items: center; gap: 12px; grid-column: auto; }
-    #telemetryGrid > div > div { margin: 0; gap: 16px; }
-    #telemetryGrid > div > div:first-child > span:last-child { display: none; }
-    #telemetryGrid > div > div:last-child > span:last-child:not([id^="tel"]) { color: var(--pf-muted); }
     #exportActions { margin-top: 18px; justify-content: flex-start; display: grid; grid-template-columns: 1fr; gap: 10px; }
     #exportActions button { justify-content: center; border-radius: 8px; }
     #parentGuide { margin: 0 0 18px; padding: 16px; border: 1px solid #365064; border-radius: 14px; background: #101b27; }
@@ -250,8 +243,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       #exportActions { display: flex; }
       #parentGuide ol { grid-template-columns: repeat(3,minmax(0,1fr)); }
       #contextFields { grid-template-columns: repeat(6,minmax(0,1fr)); }
-      #telemetryGrid { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 16px; }
-      #telemetryGrid > div { flex-direction: column; align-items: stretch; gap: 10px; }
     }
     @media (min-width: 1024px), (orientation: landscape) and (min-width: 600px) {
       #operationWorkspace { grid-template-columns: minmax(0,1fr); gap: 0; }
@@ -309,10 +300,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       <!-- Hidden file inputs -->
       <input type="file" id="cameraInput" accept="video/*" capture="environment" class="hidden">
       <input type="file" id="fileInput" accept="video/*" class="hidden">
-
-      <button id="btnCapture" hidden>拍攝影片</button>
-
-      <button id="btnChoose" hidden>選擇影片</button>
 
       <a class="header-link" href="https://github.com/bddgtw-tw/pitchframe-baseball-lab" target="_blank" rel="noopener" aria-label="到 GitHub 查看 PitchFrame 專案">GitHub</a>
 
@@ -531,9 +518,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         
         <!-- Step & Play Controls -->
         <div id="frameControls" class="flex items-center gap-1 sm:gap-1.5">
-          <button id="btnPrev5" hidden title="倒退 5 格（按住連續倒退）">
-            −5格
-          </button>
           <button id="btnPrev1" title="倒退 1 格（按住連續倒退；鍵盤左鍵）" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg font-semibold border border-slate-700 transition">
             −1格
           </button>
@@ -545,9 +529,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           <button id="btnNext1" title="前進 1 格（按住連續前進；鍵盤右鍵）" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg font-semibold border border-slate-700 transition">
             +1格
           </button>
-          <button id="btnNext5" hidden title="前進 5 格（按住連續前進）">
-            +5格
-          </button>
 
           <!-- Loop toggle button -->
 
@@ -555,10 +536,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
         <!-- Speed Selector Pills -->
         <div id="speedControls" aria-label="播放速度" class="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
-          <button class="speed-btn" hidden data-speed="0.1">0.1×</button>
           <button class="speed-btn px-2 py-1 rounded-lg text-slate-400 hover:text-white transition" data-speed="0.25">0.25×</button>
           <button class="speed-btn px-2 py-1 rounded-lg text-slate-400 hover:text-white transition" data-speed="0.5">0.5×</button>
-          <button class="speed-btn" hidden data-speed="0.75">0.75×</button>
           <button class="speed-btn px-2 py-1 rounded-lg bg-lime-400 text-slate-950 font-bold transition" data-speed="1.0">1.0×</button>
         </div>
 
@@ -666,70 +645,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         <h2 id="resultsHeading">分析結果</h2>
         <span id="timeFrameBadge">00:00.0 (0格)</span>
       </div>
-    <p id="headAnchorNotice" hidden>頭部小點是雙耳中點的位置示意，不代表精確顱骨中心或頭部前傾角；雙耳可信度不足時不顯示。</p>
-    <!-- Telemetry Bar: Real-time Angles & Biomechanics (Clean, Read-only Badges) -->
-    <div id="telemetryGrid" hidden>
-      <!-- Trunk Tilt -->
-      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between">
-        <div class="text-[11px] text-slate-400 flex items-center justify-between">
-          <span>軀幹傾角</span>
-          <span class="w-2 h-2 rounded-full bg-yellow-400"></span>
-        </div>
-        <div class="flex items-baseline justify-between mt-1">
-          <span id="telTrunkTilt" class="text-base sm:text-lg font-bold font-mono text-yellow-300">--°</span>
-          <span id="telTrunkDirection" class="text-[10px] text-slate-500">中軸鉛直</span>
-        </div>
-      </div>
-
-      <!-- Left Elbow -->
-      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between">
-        <div class="text-[11px] text-slate-400 flex items-center justify-between">
-          <span>左手肘角度</span>
-          <span class="w-2 h-2 rounded-full bg-sky-400"></span>
-        </div>
-        <div class="flex items-baseline justify-between mt-1">
-          <span id="telLeftElbow" class="text-base sm:text-lg font-bold font-mono text-sky-400">--°</span>
-          <span class="text-[10px] text-slate-500">肩-肘-腕</span>
-        </div>
-      </div>
-
-      <!-- Right Elbow -->
-      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between">
-        <div class="text-[11px] text-slate-400 flex items-center justify-between">
-          <span>右手肘角度</span>
-          <span class="w-2 h-2 rounded-full bg-orange-400"></span>
-        </div>
-        <div class="flex items-baseline justify-between mt-1">
-          <span id="telRightElbow" class="text-base sm:text-lg font-bold font-mono text-orange-400">--°</span>
-          <span class="text-[10px] text-slate-500">肩-肘-腕</span>
-        </div>
-      </div>
-
-      <!-- Left Knee -->
-      <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between">
-        <div class="text-[11px] text-slate-400 flex items-center justify-between">
-          <span>左膝角度</span>
-          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-        </div>
-        <div class="flex items-baseline justify-between mt-1">
-          <span id="telLeftKnee" class="text-base sm:text-lg font-bold font-mono text-emerald-400">--°</span>
-          <span class="text-[10px] text-slate-500">髖-膝-踝</span>
-        </div>
-      </div>
-
-      <!-- Right Knee -->
-      <div class="col-span-2 sm:col-span-1 bg-slate-900/90 border border-slate-800 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between">
-        <div class="text-[11px] text-slate-400 flex items-center justify-between">
-          <span>右膝角度</span>
-          <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
-        </div>
-        <div class="flex items-baseline justify-between mt-1">
-          <span id="telRightKnee" class="text-base sm:text-lg font-bold font-mono text-cyan-400">--°</span>
-          <span class="text-[10px] text-slate-500">髖-膝-踝</span>
-        </div>
-      </div>
-    </div>
-
     <div id="analysisCoverage" class="mt-3 rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-[11px] leading-relaxed text-slate-400" aria-live="polite">
       載入影片並完成整段骨架分析後，這裡會顯示實際辨識覆蓋率。
     </div>
@@ -812,8 +727,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     // UI Buttons & Inputs
     const cameraInput = document.getElementById('cameraInput');
     const fileInput = document.getElementById('fileInput');
-    const btnCapture = document.getElementById('btnCapture');
-    const btnChoose = document.getElementById('btnChoose');
     const btnClearVideo = document.getElementById('btnClearVideo');
     const btnEmptyCapture = document.getElementById('btnEmptyCapture');
     const btnEmptyChoose = document.getElementById('btnEmptyChoose');
@@ -821,8 +734,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const playIcon = document.getElementById('playIcon');
     const btnPrev1 = document.getElementById('btnPrev1');
     const btnNext1 = document.getElementById('btnNext1');
-    const btnPrev5 = document.getElementById('btnPrev5');
-    const btnNext5 = document.getElementById('btnNext5');
     const btnLoop = document.getElementById('btnLoop');
     const loopStatusText = document.getElementById('loopStatusText');
     const sepTintCanvas = document.getElementById('sepTintCanvas');
@@ -842,14 +753,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const durationWarningText = document.getElementById('durationWarningText');
     const btnCloseWarning = document.getElementById('btnCloseWarning');
     const fallbackNotice = document.getElementById('fallbackNotice');
-
-    // Telemetry display elements
-    const telTrunkTilt = document.getElementById('telTrunkTilt');
-    const telTrunkDirection = document.getElementById('telTrunkDirection');
-    const telLeftElbow = document.getElementById('telLeftElbow');
-    const telRightElbow = document.getElementById('telRightElbow');
-    const telLeftKnee = document.getElementById('telLeftKnee');
-    const telRightKnee = document.getElementById('telRightKnee');
 
     // Annotation elements
     const toolButtons = document.querySelectorAll('.tool-btn');
@@ -3032,7 +2935,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       ctx.closePath();
     }
 
-    /* 更新遙測欄與播放格數計數器 */
+    /* 更新播放時間與格數 */
     function updateTelemetryAndCounters() {
       const visiblePlayPair = pairedPlaybackActive() ? playPair : null;
       const curTime = timelineSeekTarget !== null ? timelineSeekTarget : (visiblePlayPair ? visiblePlayPair.time : displayedFrameTime());
@@ -3044,51 +2947,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         scrubber.value = Math.min(100, (curTime / effectiveDuration) * 100);
       }
 
-      const curCacheKey = getPoseCacheKey(curTime);
-      const telemetryLandmarks = scrubSession && scrubPair
-        ? scrubPair.landmarks
-        : (visiblePlayPair
-          ? visiblePlayPair.landmarks
-          : (poseCache.has(curCacheKey)
-            ? poseCache.get(curCacheKey)
-            : ((analysisActive() || trackComplete()) ? null
-            : (isPlaying && currentLandmarks && currentPoseStamp && currentPoseStamp.source === sourceGeneration && currentPoseStamp.seek === seekGeneration)
-              ? currentLandmarks
-              : (poseMatchesFrame() ? currentLandmarks : null))));
-      if (!telemetryLandmarks || telemetryLandmarks.length < 25) {
-        telTrunkTilt.textContent = '--°'; telTrunkDirection.textContent = '資料不足';
-        telLeftElbow.textContent = '--°';
-        telRightElbow.textContent = '--°';
-        telLeftKnee.textContent = '--°';
-        telRightKnee.textContent = '--°';
-        return;
-      }
-
-      // 遙測數據
-      const lm = telemetryLandmarks;
-      const leftElbowAngle = calculateAngle(lm[11], lm[13], lm[15]);
-      const rightElbowAngle = calculateAngle(lm[12], lm[14], lm[16]);
-      const leftKneeAngle = calculateAngle(lm[23], lm[25], lm[27]);
-      const rightKneeAngle = calculateAngle(lm[24], lm[26], lm[28]);
-
-      telLeftElbow.textContent = leftElbowAngle !== null ? `${leftElbowAngle}°` : '--°';
-      telRightElbow.textContent = rightElbowAngle !== null ? `${rightElbowAngle}°` : '--°';
-      telLeftKnee.textContent = leftKneeAngle !== null ? `${leftKneeAngle}°` : '--°';
-      telRightKnee.textContent = rightKneeAngle !== null ? `${rightKneeAngle}°` : '--°';
-
-      if ([lm[11],lm[12],lm[23],lm[24]].every(credibleBodyPoint)) {
-        const midShoulder = { x: (lm[11].x + lm[12].x) / 2, y: (lm[11].y + lm[12].y) / 2 };
-        const pelvisCenter = { x: (lm[23].x + lm[24].x) / 2, y: (lm[23].y + lm[24].y) / 2 };
-        const { w: aspectW, h: aspectH } = pixelAspect();
-        const dx = (midShoulder.x - pelvisCenter.x) * aspectW;
-        const dy = (midShoulder.y - pelvisCenter.y) * aspectH;
-        const rad = Math.atan2(dx, -dy);
-        const deg = Math.round(rad * 180 / Math.PI);
-        telTrunkTilt.textContent = `${Math.abs(deg)}°`;
-        telTrunkDirection.textContent = deg > 1 ? '右/前傾' : deg < -1 ? '左/後傾' : '中軸鉛直';
-      } else {
-        telTrunkTilt.textContent = '--°'; telTrunkDirection.textContent = '資料不足';
-      }
     }
 
     /* ==========================================================================
@@ -3457,7 +3315,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       }
     });
 
-    function textMetric(el) { return el && el.textContent ? el.textContent.trim() : '資料不足'; }
     let progressHistory = [];
     try {
       const saved = JSON.parse(localStorage.getItem('pf-progress-history') || '[]');
@@ -3607,15 +3464,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           coreReady: qualityCoreReady,
           comparisonReady: qualityCoreReady && captureQuality.comparableSetup,
           source: 'self-reported-by-user'
-        },
-        currentFrame: {
-          timeSeconds: Number(displayedFrameTime().toFixed(3)),
-          trunkTilt: textMetric(telTrunkTilt),
-          trunkDirection: textMetric(telTrunkDirection),
-          leftElbow: textMetric(telLeftElbow),
-          rightElbow: textMetric(telRightElbow),
-          leftKnee: textMetric(telLeftKnee),
-          rightKnee: textMetric(telRightKnee)
         },
         estimatedEvents: {
           footStrikeSeconds: sep ? eventTime(sep.foot) : null,
@@ -4165,10 +4013,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
        10. 事件接聽綁定與 UI 互動
        ========================================================================== */
     // 拍攝與選擇檔案入口（阻斷冒泡，避免多重觸發導致檔案選擇器被瀏覽器取消）
-    btnCapture.addEventListener('click', (e) => {
-      e.stopPropagation();
-      cameraInput.click();
-    });
     btnEmptyCapture.addEventListener('click', (e) => {
       e.stopPropagation();
       cameraInput.click();
@@ -4180,10 +4024,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       cameraInput.value = ''; // 允許重複選取相同檔案
     });
 
-    btnChoose.addEventListener('click', (e) => {
-      e.stopPropagation();
-      fileInput.click();
-    });
     btnEmptyChoose.addEventListener('click', (e) => {
       e.stopPropagation();
       fileInput.click();
@@ -4249,11 +4089,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       btn.addEventListener('contextmenu', (e) => e.preventDefault());
       Object.assign(btn.style, { touchAction: 'none', userSelect: 'none', webkitUserSelect: 'none', webkitTouchCallout: 'none' });
     }
-    bindHoldStep(btnPrev5, -5);
     bindHoldStep(btnPrev1, -1);
     bindHoldStep(btnNext1, 1);
-    bindHoldStep(btnNext5, 5);
-    window.addEventListener('blur', () => [btnPrev5, btnPrev1, btnNext1, btnNext5].forEach(b => b.dispatchEvent(new Event('pointercancel'))));
+    window.addEventListener('blur', () => [btnPrev1, btnNext1].forEach(b => b.dispatchEvent(new Event('pointercancel'))));
 
     // 循環開關
     btnLoop.addEventListener('click', () => {

@@ -90,7 +90,6 @@
         "source": { "const": "self-reported-by-user" }
       }
     },
-    "currentFrame": { "type": "object" },
     "estimatedEvents": {
       "type": "object",
       "required": ["footStrikeSeconds", "footStrikeSource", "ballReleaseSeconds", "ballReleaseSource", "separationTrend", "separationSignal"],

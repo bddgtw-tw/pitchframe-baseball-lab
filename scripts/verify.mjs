@@ -49,7 +49,7 @@ for (const samplingBehavior of ['const ANALYSIS_SAMPLE_FPS = 8', 'sampledKeys: f
 for (const eventSyncBehavior of ['function currentManualEventKey()', 'poseMatchesFrame() ? currentPoseStamp : frameStamp()', 'manualRelease = currentManualEventKey()', 'sepCache = null; renderStage(); renderAnalysisCoverage()']) {
   if (!html.includes(eventSyncBehavior)) fail(`Manual event/frame synchronization is missing: ${eventSyncBehavior}`);
 }
-for (const blockingBehavior of ['src="./tailwind.js"', "addEventListener('DOMContentLoaded', initMediaPipe)", 'user-scalable=no', 'btnInstallApp', 'beforeinstallprompt', 'btnSmooth', 'blendCanvas', 'sessionSetup.open = true']) {
+for (const blockingBehavior of ['src="./tailwind.js"', "addEventListener('DOMContentLoaded', initMediaPipe)", 'user-scalable=no', 'btnInstallApp', 'beforeinstallprompt', 'btnSmooth', 'blendCanvas', 'sessionSetup.open = true', 'btnPrev5', 'btnNext5', 'data-speed="0.1"', 'data-speed="0.75"', 'btnCapture', 'btnChoose', 'telemetryGrid', 'currentFrame: {']) {
   if (html.includes(blockingBehavior)) fail(`Blocking or inaccessible startup behavior remains: ${blockingBehavior}`);
 }
 for (const scienceGuard of ['不能據此要求孩子增加扭轉', '不得解讀為越大越好', 'PMC9532595', 'pitchframe-analysis-package-v2', 'validatedPhysicalMeasurement: false']) {

@@ -49,7 +49,6 @@
     "comparisonReady": false,
     "source": "self-reported-by-user"
   },
-  "currentFrame": {},
   "estimatedEvents": {
     "footStrikeSeconds": 1.15,
     "footStrikeSource": "manual",
