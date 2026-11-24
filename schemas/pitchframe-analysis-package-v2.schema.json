@@ -62,8 +62,13 @@
       "type": "object",
       "required": ["footStrikeSeconds", "footStrikeSource", "ballReleaseSeconds", "ballReleaseSource", "separationTrend", "separationSignal"],
       "properties": {
+        "legLiftPeakSeconds": { "type": ["number", "null"], "minimum": 0 },
+        "legLiftPeakSource": { "type": ["string", "null"] },
         "footStrikeSeconds": { "type": ["number", "null"], "minimum": 0 },
         "footStrikeSource": { "type": ["string", "null"] },
+        "maxExternalRotationSeconds": { "type": ["number", "null"], "minimum": 0 },
+        "maxExternalRotationSource": { "type": ["string", "null"], "description": "manual, automatic-estimate, or rough-time-estimate (about 0.03 s before release when no analysis sample falls between foot strike and release)." },
+        "maxExternalRotationNote": { "type": "string", "description": "Frame timing only. A single 2D camera cannot measure the shoulder external rotation angle." },
         "ballReleaseSeconds": { "type": ["number", "null"], "minimum": 0 },
         "ballReleaseSource": { "type": ["string", "null"] },
         "separationTrend": { "type": "string" },

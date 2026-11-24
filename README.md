@@ -2,7 +2,7 @@
 
 [![Verify PitchFrame](https://github.com/bddgtw-tw/pitchframe-baseball-lab/actions/workflows/verify.yml/badge.svg)](https://github.com/bddgtw-tw/pitchframe-baseball-lab/actions/workflows/verify.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**拍一球，看懂孩子的投球。** 手機拍下孩子投球，PitchFrame 自動畫出骨架、找出前腳落地與出手，再做成一張圖讓你傳給教練。免費、免登入，影片不會上傳。
+**拍一球，看懂孩子的投球。** 手機拍下孩子投球，PitchFrame 自動畫出骨架、找出抬腿最高點、前腳落地、最大外旋與出手四個關鍵格，再做成一張圖讓你傳給教練。免費、免登入，影片不會上傳。
 
 ### 👉 [立即使用（手機打開就能用）](https://bddgtw-tw.github.io/pitchframe-baseball-lab/)
 
@@ -17,11 +17,11 @@
 | | 你要做的事 | PitchFrame 做的事 |
 |---|---|---|
 | **1. 拍攝** | 手機固定在投手側面或側後方，全身入鏡，拍一球（5–10 秒）。 | 影片只在你的手機上讀取，不上傳。 |
-| **2. 分析** | 在畫面上點一下你的孩子。 | 逐格畫出骨架與關節角度，自動找出前腳落地與出手。 |
-| **3. 結果** | 點「前腳落地」「出手」跳過去看；不對就逐格後按「改成目前這格」。 | 按「分享結果圖給教練」，把兩個關鍵格並排成一張圖，用 LINE 等 App 傳出。 |
+| **2. 分析** | 在畫面上點一下你的孩子。 | 逐格畫出骨架與關節角度，自動找出抬腿最高點、前腳落地、最大外旋與出手。 |
+| **3. 結果** | 點四個關鍵格的名稱跳過去看；不對就逐格後按「改成目前這格」。 | 按「分享結果圖給教練」，把四個關鍵格排成一張圖，用 LINE 等 App 傳出。 |
 
 <p align="center">
-  <img src="assets/result-card.jpg" alt="結果圖範例：前腳落地與出手兩格，畫上骨架與關節角度" width="360">
+  <img src="assets/result-card.jpg" alt="結果圖範例：關鍵格畫上骨架與關節角度" width="360">
 </p>
 
 ## 為什麼家長會想用
@@ -44,7 +44,7 @@
 PitchFrame 是觀察與溝通工具，不是評分系統，也不是醫療產品。
 
 - 手機單一角度的 2D 骨架，不等於實驗室的 3D 動作捕捉；角度只供參考，請和孩子自己的前後影片比較。
-- 自動找到的落地與出手是估計，請逐格確認。
+- 自動找到的關鍵格是估計，請逐格確認。最大外旋只標時間點，手機 2D 畫面量不到肩關節外旋角度。
 - 不能診斷或預測受傷。若孩子有疼痛、疲勞或控制力突然變差，請停止投球並尋求專業協助。
 
 方法、限制與參考文獻請見 [科學方法與安全界線](SCIENCE.md)。
@@ -58,7 +58,7 @@ PitchFrame 是觀察與溝通工具，不是評分系統，也不是醫療產品
 
 ## 給 AI 的文字摘要
 
-結果頁下方的「給 AI 的文字摘要」會產生一份 Markdown，內含前腳落地與出手的時間點與來源（人工／自動）、骨架覆蓋率、限制說明，以及要求 AI 先詢問年齡、疼痛等資訊再提出建議的指示。不含原始影片。
+結果頁下方的「給 AI 的文字摘要」會產生一份 Markdown，內含四個關鍵格的時間點與來源（人工／自動）、骨架覆蓋率、限制說明，以及要求 AI 先詢問年齡、疼痛等資訊再提出建議的指示。不含原始影片。
 
 外部工具可用 [`pitchframe-analysis-package-v2.schema.json`](schemas/pitchframe-analysis-package-v2.schema.json) 驗證其中的結構化 JSON，並參考 [匿名範例](examples/pitchframe-analysis-package-v2.example.json)。Schema 明確禁止把旋轉差訊號當成已驗證的物理量。
 

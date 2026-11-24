@@ -18,7 +18,7 @@ const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(match => match[1]);
 const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
 if (duplicates.length) fail(`Duplicate HTML ids: ${duplicates.join(', ')}`);
 
-for (const requiredId of ['captureView', 'workView', 'resultPanel', 'videoPlayer', 'scrubber', 'btnEmptyCapture', 'btnEmptyChoose', 'btnPlayPause', 'speedControls', 'btnJumpFoot', 'btnJumpRelease', 'btnMarkFoot', 'btnMarkRelease', 'btnShareResult', 'btnExportVideo', 'btnShareAI', 'aiHandoffStatus', 'btnShareApp', 'analysisCoverage']) {
+for (const requiredId of ['captureView', 'workView', 'resultPanel', 'videoPlayer', 'scrubber', 'btnEmptyCapture', 'btnEmptyChoose', 'btnPlayPause', 'speedControls', 'btnJumpLift', 'btnJumpFoot', 'btnJumpMer', 'btnJumpRelease', 'btnMarkLift', 'btnMarkFoot', 'btnMarkMer', 'btnMarkRelease', 'btnShareResult', 'btnExportVideo', 'btnShareAI', 'aiHandoffStatus', 'btnShareApp', 'analysisCoverage']) {
   if (!ids.includes(requiredId)) fail(`Required control is missing: ${requiredId}`);
 }
 for (const qualityBehavior of ['analysisCoverageSnapshot', 'operationalThreshold = 0.8', 'readyForAutomatedSummary', '80% 是 PitchFrame 的保守操作門檻']) {
@@ -36,7 +36,7 @@ for (const rate of ['0.1', '0.25', '0.5', '0.75', '1']) {
 for (const resultImageBehavior of ['async function buildResultImage()', "type: 'image/png'", 'navigator.canShare({ files: [file] })']) {
   if (!html.includes(resultImageBehavior)) fail(`Shareable result image is missing: ${resultImageBehavior}`);
 }
-for (const sharingBehavior of ['免費免登入：用手機逐格確認前腳落地與出手', "btnShareApp.textContent = '分享給其他家長'"]) {
+for (const sharingBehavior of ['免費免登入：用手機逐格確認抬腿、落地、外旋與出手', "btnShareApp.textContent = '分享給其他家長'"]) {
   if (!html.includes(sharingBehavior)) fail(`Parent sharing behavior is missing: ${sharingBehavior}`);
 }
 for (const performanceBehavior of [ 'if (!isPoseModelReady && !poseInitPromise) initMediaPipe()']) {
@@ -55,7 +55,7 @@ for (const blockingBehavior of ['src="./tailwind.js"', "addEventListener('DOMCon
 for (const removedUi of ['pitchframe.css', 'tailwind', 'drawCanvas', 'annotationToolbar', 'sepTintCanvas', 'sepStrip', 'sepPanel', 'viewSettings', 'btnLoop', 'btnResetEvents', 'btnExportPNG', 'moreExports', 'parentGuide']) {
   if (html.includes(removedUi)) fail(`Removed UI came back: ${removedUi}`);
 }
-for (const scienceGuard of ['不是評分或醫療判斷', '不得解讀為越大越好', 'pitchframe-analysis-package-v2', 'validatedPhysicalMeasurement: false']) {
+for (const scienceGuard of ['single-camera 2D cannot measure shoulder external rotation angle', '不是評分或醫療判斷', '不得解讀為越大越好', 'pitchframe-analysis-package-v2', 'validatedPhysicalMeasurement: false']) {
   if (!html.includes(scienceGuard)) fail(`Sports-science safeguard is missing: ${scienceGuard}`);
 }
 for (const unsafeClaim of ['有做到髖肩分離', '紅色應該在落地前後出現', '髖已開、肩還關著']) {
