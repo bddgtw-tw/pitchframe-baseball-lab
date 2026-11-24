@@ -28,7 +28,7 @@
       credible = point => point && Number.isFinite(point.x) && Number.isFinite(point.y)
     } = options || {};
     if (!Array.isArray(keys) || !keys.length || !poseByKey || typeof poseByKey.get !== 'function') {
-      return { foot: null, release: null, strideAnkleIndex: null, wristIndex: null, wristSource: null, reason: 'missing-input' };
+      return { legLift: null, foot: null, mer: null, release: null, strideAnkleIndex: null, wristIndex: null, wristSource: null, reason: 'missing-input' };
     }
     const W = Number.isFinite(width) && width > 0 ? width : 1;
     const H = Number.isFinite(height) && height > 0 ? height : 1;
@@ -49,13 +49,13 @@
     });
     const globalPeak = Math.max(...sides.map(side => Math.max(0, ...side.velocity)));
     if (!(globalPeak > Math.max(W, H) * 0.006)) {
-      return { foot: null, release: null, strideAnkleIndex: null, wristIndex: null, wristSource: null, reason: 'insufficient-stride-motion' };
+      return { legLift: null, foot: null, mer: null, release: null, strideAnkleIndex: null, wristIndex: null, wristSource: null, reason: 'insufficient-stride-motion' };
     }
     const movementThreshold = globalPeak * 0.5;
     sides.forEach(side => { side.onset = side.velocity.findIndex(value => value >= movementThreshold); });
     const moving = sides.filter(side => side.onset >= 0).sort((a, b) => a.onset - b.onset);
     if (!moving.length) {
-      return { foot: null, release: null, strideAnkleIndex: null, wristIndex: null, wristSource: null, reason: 'stride-foot-not-found' };
+      return { legLift: null, foot: null, mer: null, release: null, strideAnkleIndex: null, wristIndex: null, wristSource: null, reason: 'stride-foot-not-found' };
     }
     const stride = moving[0];
     let peak = stride.onset;
@@ -86,7 +86,38 @@
         if (reach > bestReach) { bestReach = reach; releaseIndex = index; }
       }
     }
+    // 抬腿最高點：跨步腳的膝蓋在落地前位置最高（畫面 y 最小）的那一格。
+    // 膝蓋必須明顯高於落地時的位置，否則視為沒有抬腿動作，不硬給答案。
+    const kneeIndex = stride.index === 27 ? 25 : 26;
+    const knees = series(kneeIndex);
+    const liftEnd = footIndex !== null ? footIndex : peak;
+    let liftIndex = null;
+    for (let index = 0; index < liftEnd; index++) {
+      if (knees[index] && (liftIndex === null || knees[index].y < knees[liftIndex].y)) liftIndex = index;
+    }
+    const kneeAtEnd = knees[liftEnd] || knees.slice(liftEnd).find(Boolean) || null;
+    if (liftIndex !== null && kneeAtEnd && kneeAtEnd.y - knees[liftIndex].y < H * 0.02) liftIndex = null;
+
+    // 最大外旋（粗估）：落地與出手之間，投球手腕落在手肘「後方」（與投球方向相反）最遠的那一格。
+    // 單機位 2D 看不到真正的肩外旋角度；這只是幫家長快速跳到手臂後倒附近，請逐格調整。
+    let merIndex = null;
+    if (footIndex !== null && releaseIndex !== null) {
+      const startX = stride.xs[stride.onset];
+      const footX = stride.xs[footIndex];
+      const direction = footX !== null && startX !== null && footX < startX ? -1 : 1;
+      const elbowIndex = wrist.index - 2;
+      let bestLayback = -Infinity;
+      for (let index = footIndex + 1; index < releaseIndex; index++) {
+        const landmarks = poseByKey.get(keys[index]);
+        const w = landmarks && landmarks[wrist.index], e = landmarks && landmarks[elbowIndex];
+        if (!w || !e || !Number.isFinite(w.x) || !Number.isFinite(e.x) || !(w.visibility >= 0.2) || !(e.visibility >= 0.2)) continue;
+        const layback = direction * (e.x - w.x) * W;
+        if (layback > bestLayback) { bestLayback = layback; merIndex = index; }
+      }
+    }
     return {
+      legLift: liftIndex === null ? null : keys[liftIndex],
+      mer: merIndex === null ? null : keys[merIndex],
       foot: footIndex === null ? null : keys[footIndex],
       release: releaseIndex === null ? null : keys[releaseIndex],
       strideAnkleIndex: stride.index,

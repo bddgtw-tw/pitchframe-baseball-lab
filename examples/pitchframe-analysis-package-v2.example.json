@@ -29,8 +29,13 @@
     }
   },
   "estimatedEvents": {
+    "legLiftPeakSeconds": 0.78,
+    "legLiftPeakSource": "automatic-estimate",
     "footStrikeSeconds": 1.15,
     "footStrikeSource": "manual",
+    "maxExternalRotationSeconds": 1.29,
+    "maxExternalRotationSource": "manual",
+    "maxExternalRotationNote": "frame timing only; single-camera 2D cannot measure shoulder external rotation angle",
     "ballReleaseSeconds": 1.32,
     "ballReleaseSource": "manual",
     "separationTrend": "落地附近出現較明顯的骨盆－上軀幹旋轉差趨勢",

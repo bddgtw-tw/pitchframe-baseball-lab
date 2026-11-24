@@ -4,12 +4,12 @@
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="description" content="拍一球，看懂孩子的投球。免費、免登入、影片不上傳：手機自動畫出骨架，找出前腳落地與出手，做成一張圖傳給教練。">
+  <meta name="description" content="拍一球，看懂孩子的投球。免費、免登入、影片不上傳：手機自動畫出骨架，找出抬腿、落地、外旋、出手四個關鍵格，做成一張圖傳給教練。">
   <meta name="robots" content="index,follow">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="zh_TW">
   <meta property="og:title" content="PitchFrame｜拍一球，看懂孩子的投球">
-  <meta property="og:description" content="免費、免登入、影片不上傳。自動畫出骨架，找出前腳落地與出手，做成一張圖傳給教練。">
+  <meta property="og:description" content="免費、免登入、影片不上傳。自動畫出骨架，找出抬腿到出手的關鍵格，做成一張圖傳給教練。">
   <meta property="og:url" content="https://bddgtw-tw.github.io/pitchframe-baseball-lab/">
   <meta property="og:image" content="https://bddgtw-tw.github.io/pitchframe-baseball-lab/assets/pitchframe-preview.png">
   <meta property="og:image:width" content="1440">
@@ -261,7 +261,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     <section id="captureView" class="view" aria-labelledby="captureTitle">
       <p class="eyebrow">給少棒家長的投球逐格工具</p>
       <h1 id="captureTitle">拍一球，<br>看懂孩子的投球</h1>
-      <p class="lead">自動畫出骨架，找出前腳落地與出手，做成一張圖傳給教練。免費、免登入，影片不會上傳。</p>
+      <p class="lead">自動畫出骨架，找出抬腿、落地、外旋、出手四個關鍵格，做成一張圖傳給教練。免費、免登入，影片不會上傳。</p>
       <button id="btnEmptyCapture" class="btn primary" type="button">拍攝投球</button>
       <button id="btnEmptyChoose" class="btn ghost" type="button">從相簿選影片</button>
       <ol class="tips" aria-label="拍攝小提示">
@@ -322,11 +322,19 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           <button type="button" data-rate="1" aria-pressed="true">1×</button>
         </div>
 
-        <p class="section-label">關鍵兩格（點一下跳過去）</p>
+        <p class="section-label">關鍵四格（點一下跳過去）</p>
         <div id="keyFrames">
+          <div class="key">
+            <button id="btnJumpLift" class="key-jump" type="button"><span class="key-name">抬腿最高點</span><span id="liftInfo" class="key-info">尋找中…</span></button>
+            <button id="btnMarkLift" class="key-set" type="button">改成目前這格</button>
+          </div>
           <div class="key">
             <button id="btnJumpFoot" class="key-jump" type="button"><span class="key-name">前腳落地</span><span id="footInfo" class="key-info">尋找中…</span></button>
             <button id="btnMarkFoot" class="key-set" type="button">改成目前這格</button>
+          </div>
+          <div class="key">
+            <button id="btnJumpMer" class="key-jump" type="button"><span class="key-name">最大外旋</span><span id="merInfo" class="key-info">尋找中…</span></button>
+            <button id="btnMarkMer" class="key-set" type="button">改成目前這格</button>
           </div>
           <div class="key">
             <button id="btnJumpRelease" class="key-jump" type="button"><span class="key-name">出手</span><span id="releaseInfo" class="key-info">尋找中…</span></button>
@@ -1533,13 +1541,20 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
        - 門檻只用來抑制低幅度推測雜訊，不是適用任何年齡的生物力學標準值。
        ========================================================================== */
     const SEP_MIN_VIS = 0.5, SEP_ON_DEG = 10, SEP_FULL_DEG = 35;
-    let sepCache = null, manualFoot = null, manualRelease = null;
+    let sepCache = null, manualLift = null, manualFoot = null, manualMer = null, manualRelease = null;
+    const btnJumpLift = document.getElementById('btnJumpLift');
     const btnJumpFoot = document.getElementById('btnJumpFoot');
+    const btnJumpMer = document.getElementById('btnJumpMer');
     const btnJumpRelease = document.getElementById('btnJumpRelease');
+    const liftInfo = document.getElementById('liftInfo');
     const footInfo = document.getElementById('footInfo');
+    const merInfo = document.getElementById('merInfo');
     const releaseInfo = document.getElementById('releaseInfo');
+    // 最大外旋通常在出手前極短時間內發生（文獻多在 0.02–0.05 秒）。落地與出手之間沒有取樣點時，
+    // 先跳到出手前約 0.03 秒當起點，標示為「粗估」，由家長逐格調整。
+    const MER_BEFORE_RELEASE_SECONDS = 0.03;
 
-    function resetSeparation() { sepCache = null; manualFoot = null; manualRelease = null; }
+    function resetSeparation() { sepCache = null; manualLift = null; manualFoot = null; manualMer = null; manualRelease = null; }
     const v3 = {
       sub: (a, b) => [a.x - b.x, a.y - b.y, a.z - b.z],
       mid: (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 }),
@@ -1585,7 +1600,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     function getSeparation() {
       if (!video.videoWidth) return null;
-      const stamp = `${sourceGeneration}|${trackJob ? trackJob.done : 0}|${poseCache.size}|${manualFoot}|${manualRelease}`;
+      const stamp = `${sourceGeneration}|${trackJob ? trackJob.done : 0}|${poseCache.size}|${manualLift}|${manualFoot}|${manualMer}|${manualRelease}`;
       if (sepCache && sepCache.stamp === stamp) return sepCache;
       const keys = [...worldCache.keys()].filter(k => poseCache.has(k)).sort((a, b) => a - b);
       const raw = keys.map(k => torsoTwist(worldCache.get(k)));
@@ -1599,16 +1614,26 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       // 播放或逐格時即時補分析的影格不加入，否則自動找到的落地／出手會隨播放跳動。
       const sampledKeys = trackJob && trackJob.source === sourceGeneration && trackJob.sampledKeys
         ? trackJob.sampledKeys.filter(k => poseCache.has(k)) : keys;
-      const ev = trackComplete() || !hasTargetChoice() ? detectEvents(sampledKeys) : { foot: null, release: null };
+      const ev = trackComplete() || !hasTargetChoice() ? detectEvents(sampledKeys) : { legLift: null, foot: null, mer: null, release: null };
       const foot = manualFoot !== null ? manualFoot : ev.foot;
       const release = manualRelease !== null ? manualRelease : ev.release;
+      let legLift = manualLift !== null ? manualLift : ev.legLift ?? null;
+      if (manualLift === null && legLift !== null && foot !== null && legLift >= foot) legLift = null;
+      let mer = manualMer !== null ? manualMer : null, merRough = false;
+      if (mer === null && foot !== null && release !== null && release > foot) {
+        if (ev.mer !== null && ev.mer !== undefined && ev.mer > foot && ev.mer < release) mer = ev.mer;
+        else {
+          const guess = getPoseCacheKey(Math.max(sepKeyTime(foot), sepKeyTime(release) - MER_BEFORE_RELEASE_SECONDS));
+          if (guess > foot && guess < release) { mer = guess; merRough = true; }
+        }
+      }
       let footLevel = null;
       if (foot !== null) {
         const near = [foot - 1, foot, foot + 1].map(k => level.get(k)).filter(v => v !== null && v !== undefined);
         footLevel = near.length ? median(near) : null;
       }
-      sepCache = { stamp, keys, level, signed, foot, release, footLevel, manual: manualFoot !== null,
-        manualFoot: manualFoot !== null, manualRelease: manualRelease !== null,
+      sepCache = { stamp, keys, level, signed, legLift, foot, mer, release, footLevel, manual: manualFoot !== null,
+        manualLift: manualLift !== null, manualFoot: manualFoot !== null, manualMer: manualMer !== null, manualRelease: manualRelease !== null, merRough,
         strideAnkleIndex: ev.strideAnkleIndex ?? null, wristIndex: ev.wristIndex ?? null, wristSource: ev.wristSource ?? null, eventReason: ev.reason || null };
       return sepCache;
     }
@@ -1622,7 +1647,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       video.currentTime = target;
       if (!video.seeking) { timelineSeekTarget = null; observePresentedFrame(); triggerPoseInference(); renderStage(); }
     }
+    btnJumpLift.addEventListener('click', () => { const s = getSeparation(); if (s) jumpToKey(s.legLift); });
     btnJumpFoot.addEventListener('click', () => { const s = getSeparation(); if (s) jumpToKey(s.foot); });
+    btnJumpMer.addEventListener('click', () => { const s = getSeparation(); if (s) jumpToKey(s.mer); });
     btnJumpRelease.addEventListener('click', () => { const s = getSeparation(); if (s) jumpToKey(s.release); });
     function currentManualEventKey() {
       // Prefer the exact decoded frame that produced the visible skeleton. video.currentTime can
@@ -1630,6 +1657,18 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const stamp = poseMatchesFrame() ? currentPoseStamp : frameStamp();
       return getPoseCacheKey(stamp && Number.isFinite(stamp.time) ? stamp.time : displayedFrameTime());
     }
+    document.getElementById('btnMarkLift').addEventListener('click', () => {
+      if (!video.videoWidth) return;
+      if (isPlaying) pauseVideo(false, false);
+      manualLift = currentManualEventKey();
+      sepCache = null; renderStage(); renderAnalysisCoverage();
+    });
+    document.getElementById('btnMarkMer').addEventListener('click', () => {
+      if (!video.videoWidth) return;
+      if (isPlaying) pauseVideo(false, false);
+      manualMer = currentManualEventKey();
+      sepCache = null; renderStage(); renderAnalysisCoverage();
+    });
     document.getElementById('btnMarkFoot').addEventListener('click', () => {
       if (!video.videoWidth) return;
       if (isPlaying) pauseVideo(false, false);
@@ -1644,16 +1683,18 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     });
     function updateEventChips(sep) {
       const current = video.videoWidth ? currentManualEventKey() : null;
-      const show = (button, info, key, manual) => {
+      const show = (button, info, key, manual, rough = false) => {
         if (key === null || key === undefined) {
           info.textContent = trackComplete() ? '沒找到，請手動標記' : '尋找中…';
           button.classList.remove('is-current');
           return;
         }
-        info.textContent = `第 ${key + 1} 格・${manual ? '你標記的' : 'AI 估計'}`;
+        info.textContent = `第 ${key + 1} 格・${manual ? '你標記的' : rough ? 'AI 粗估' : 'AI 估計'}`;
         button.classList.toggle('is-current', current === key);
       };
+      show(btnJumpLift, liftInfo, sep ? sep.legLift : null, sep && sep.manualLift);
       show(btnJumpFoot, footInfo, sep ? sep.foot : null, sep && sep.manualFoot);
+      show(btnJumpMer, merInfo, sep ? sep.mer : null, sep && sep.manualMer, sep && sep.merRough);
       show(btnJumpRelease, releaseInfo, sep ? sep.release : null, sep && sep.manualRelease);
     }
 
@@ -2414,7 +2455,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     btnShareApp.addEventListener('click', async () => {
       const shareData = {
         title: 'PitchFrame 少棒投球逐格分析',
-        text: '免費免登入：用手機逐格確認前腳落地與出手，再把具體影格傳給教練討論。影片只在自己的裝置分析。',
+        text: '免費免登入：用手機逐格確認抬腿、落地、外旋與出手，再把具體影格傳給教練討論。影片只在自己的裝置分析。',
         url: 'https://bddgtw-tw.github.io/pitchframe-baseball-lab/'
       };
       try {
@@ -2450,7 +2491,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     function aiAnalysisPackage() {
       const sep = getSeparation();
       const eventTime = key => key === null || key === undefined ? null : Number(sepKeyTime(key).toFixed(3));
+      const liftTime = sep ? eventTime(sep.legLift) : null;
       const footTime = sep ? eventTime(sep.foot) : null;
+      const merTime = sep ? eventTime(sep.mer) : null;
       const releaseTime = sep ? eventTime(sep.release) : null;
       const phaseMilliseconds = footTime !== null && releaseTime !== null && releaseTime >= footTime
         ? Math.round((releaseTime - footTime) * 1000) : null;
@@ -2477,8 +2520,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           poseCoverage
         },
         estimatedEvents: {
+          legLiftPeakSeconds: liftTime,
+          legLiftPeakSource: sep && sep.legLift !== null ? (sep.manualLift ? 'manual' : 'automatic-estimate') : null,
           footStrikeSeconds: footTime,
           footStrikeSource: sep && sep.foot !== null ? (sep.manualFoot ? 'manual' : 'automatic-estimate') : null,
+          maxExternalRotationSeconds: merTime,
+          maxExternalRotationSource: sep && sep.mer !== null ? (sep.manualMer ? 'manual' : sep.merRough ? 'rough-time-estimate' : 'automatic-estimate') : null,
+          maxExternalRotationNote: 'frame timing only; single-camera 2D cannot measure shoulder external rotation angle',
           ballReleaseSeconds: releaseTime,
           ballReleaseSource: sep && sep.release !== null ? (sep.manualRelease ? 'manual' : 'automatic-estimate') : null,
           eventDetectionReason: sep ? sep.eventReason : null,
@@ -2493,24 +2541,30 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           }
         },
         currentEventMetrics: {
+          legLiftPeak: sep ? frameMetricsAtKey(sep.legLift) : null,
           footStrike: sep ? frameMetricsAtKey(sep.foot) : null,
+          maxExternalRotation: sep ? frameMetricsAtKey(sep.mer) : null,
           ballRelease: sep ? frameMetricsAtKey(sep.release) : null
         },
         limitations: [
           '單一相機與 MediaPipe 姿態估計不能取代 3D 動作捕捉、測力板或醫療評估。',
           '關節角度是 2D 畫面投影；相機角度、遮擋、寬鬆衣物與動態模糊都會影響結果。',
-          '前腳落地、出手與髖肩分離為演算法估計；使用前應逐格人工確認。',
+          '抬腿最高點、前腳落地、最大外旋、出手與髖肩分離為演算法估計；使用前應逐格人工確認。',
+          '最大外旋只標出時間點：單一 2D 畫面量不到肩關節外旋角度，也不應拿來評估手臂負荷。',
           '本資料不能用來診斷傷害或預測受傷。疼痛、疲勞或控制力下降時應停止投球並諮詢專業人員。'
         ]
       };
-      const eventSourceLabel = source => source === 'manual' ? '人工確認' : source === 'automatic-estimate' ? '系統估計，請人工確認' : '未確認';
+      const eventSourceLabel = source => source === 'manual' ? '人工確認' : source === 'automatic-estimate' ? '系統估計，請人工確認'
+        : source === 'rough-time-estimate' ? '依出手時間粗估，請逐格確認' : '未確認';
       const timeLabel = value => Number.isFinite(value) ? `${value.toFixed(3)} 秒` : '未確認';
       const readinessLabel = poseCoverage.readyForAutomatedSummary
         ? '骨架覆蓋與關鍵事件達到目前的摘要門檻；仍需教練查看原始畫面。'
         : '資料尚未達到摘要門檻；請先確認落地／出手或重拍清楚影片。';
       const coveragePercent = poseCoverage.detectedRatio === null ? null : Math.round(poseCoverage.detectedRatio * 100);
       const coachSummary = `## 給教練的快速摘要\n\n` +
+        `- 抬腿最高點：${timeLabel(data.estimatedEvents.legLiftPeakSeconds)}（${eventSourceLabel(data.estimatedEvents.legLiftPeakSource)}）\n` +
         `- 前腳落地：${timeLabel(data.estimatedEvents.footStrikeSeconds)}（${eventSourceLabel(data.estimatedEvents.footStrikeSource)}）\n` +
+        `- 最大外旋（只標時間點，不是角度）：${timeLabel(data.estimatedEvents.maxExternalRotationSeconds)}（${eventSourceLabel(data.estimatedEvents.maxExternalRotationSource)}）\n` +
         `- 出手：${timeLabel(data.estimatedEvents.ballReleaseSeconds)}（${eventSourceLabel(data.estimatedEvents.ballReleaseSource)}）\n` +
         `- 落地到出手：${Number.isFinite(phaseMilliseconds) ? `${phaseMilliseconds} 毫秒` : '資料不足'}\n` +
         `- 骨架覆蓋：${poseCoverage.analyzedFrames ? `${coveragePercent}%（${poseCoverage.detectedFrames}/${poseCoverage.analyzedFrames} 個取樣點）` : '尚無完整分析'}\n` +
@@ -2522,7 +2576,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         coachSummary +
         `## 給 AI 的任務\n\n若 analysisReadiness.poseCoverage.readyForAutomatedSummary 不是 true，先要求人工確認事件或重拍，不得提出動作修正。提出任何技術建議前，先向使用者詢問投球手、年齡層、拍攝視角、投手丘／平地，以及當天是否疼痛或明顯疲勞；資訊未補齊就只描述看得到的影格證據。資料足夠時，依「下肢承接 → 骨盆 → 上軀幹 → 手臂 → 出手」順序分析，每項都引用具體時間點或數值，並區分【觀察】【推論】【待確認】。本分析包只描述單次投球，不得宣稱進步或退步。髖肩分離欄位只是單機位模型相對趨勢，不得解讀為越大越好、動力傳遞效率、球速或傷害風險。若使用者回覆有疼痛或明顯疲勞，先建議停止高強度投球、告知成人並尋求適當專業評估。最後只提出 1 個最值得驗證的觀察線索與下次重拍方式；不要僅憑本分析包開立加重量、最大強度、增加投球量或強迫增加軀幹扭轉的訓練。沒有附關鍵畫面或影片時，先要求補上，不要假裝看過。\n\n` +
         `## 結構化資料\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\`\n\n` +
-        `## 建議一起提供\n\n- 前腳落地前一格、落地格、出手格的 PNG\n- 原始影片或 PitchFrame 匯出的骨架影片\n- 投手慣用手、年齡層、這次是平地或投手丘\n- 當天是否疼痛或明顯疲勞（若有，先停止投球並尋求專業評估）\n`;
+        `## 建議一起提供\n\n- 抬腿最高點、前腳落地、最大外旋、出手四格的結果圖\n- 原始影片或 PitchFrame 匯出的骨架影片\n- 投手慣用手、年齡層、這次是平地或投手丘\n- 當天是否疼痛或明顯疲勞（若有，先停止投球並尋求專業評估）\n`;
     }
 
     function downloadBlob(blob, fileName) {
@@ -2567,7 +2621,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       }
     });
 
-    /* 結果圖：前腳落地與出手兩格並排，畫上骨架與角度，一張圖就能傳給教練。
+    /* 結果圖：抬腿最高點、前腳落地、最大外旋、出手排成一張，畫上骨架與角度，一張圖就能傳給教練。
        用隱藏的分析用影片解碼關鍵格，不打斷主畫面。沒有骨架的格子只畫原畫面，不捏造。 */
     async function decodeAnalysisFrame(time) {
       if (analysisVideo.getAttribute('src') !== currentVideoObjectUrl) {
@@ -2602,15 +2656,20 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     async function buildResultImage() {
       const sep = getSeparation();
       const items = [];
+      if (sep && sep.legLift !== null) items.push({ key: sep.legLift, name: '抬腿最高點', manual: sep.manualLift });
       if (sep && sep.foot !== null) items.push({ key: sep.foot, name: '前腳落地', manual: sep.manualFoot });
+      if (sep && sep.mer !== null) items.push({ key: sep.mer, name: '最大外旋', manual: sep.manualMer, rough: sep.merRough });
       if (sep && sep.release !== null) items.push({ key: sep.release, name: '出手', manual: sep.manualRelease });
       if (!items.length) items.push({ key: currentManualEventKey(), name: '目前畫面', manual: null });
       const aspect = (video.videoWidth || 16) / (video.videoHeight || 9);
-      const sideBySide = aspect < 1.1 && items.length > 1;
+      // 1–2 格：直式影片並排、橫式上下排；3–4 格一律排成 2×2，LINE 預覽時每格仍夠大。
+      const grid = items.length > 2;
+      const sideBySide = !grid && aspect < 1.1 && items.length > 1;
       const pad = 28, labelH = 64, footH = 72;
-      const pw = sideBySide ? Math.round(900 * aspect) : 1000;
-      const ph = sideBySide ? 900 : Math.round(1000 / aspect);
-      const cols = sideBySide ? items.length : 1, rows = sideBySide ? 1 : items.length;
+      const pw = sideBySide || (grid && aspect < 1.1) ? Math.round(900 * aspect) : 1000;
+      const ph = sideBySide || (grid && aspect < 1.1) ? 900 : Math.round(1000 / aspect);
+      const cols = grid ? 2 : sideBySide ? items.length : 1;
+      const rows = Math.ceil(items.length / cols);
       const card = document.createElement('canvas');
       card.width = pad + cols * (pw + pad);
       card.height = pad + rows * (labelH + ph + pad) + footH - pad;
@@ -2619,13 +2678,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const font = (size, weight = 700) => `${weight} ${size}px -apple-system, BlinkMacSystemFont, "Noto Sans TC", sans-serif`;
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        const x = pad + (sideBySide ? i * (pw + pad) : 0);
-        const y = pad + (sideBySide ? 0 : i * (labelH + ph + pad));
+        const x = pad + (i % cols) * (pw + pad);
+        const y = pad + Math.floor(i / cols) * (labelH + ph + pad);
         ctx.fillStyle = '#bef264'; ctx.font = font(34, 800); ctx.textBaseline = 'middle';
         ctx.fillText(item.name, x, y + labelH / 2 - 4);
         const nameW = ctx.measureText(item.name).width;
         ctx.fillStyle = '#9fb3c2'; ctx.font = font(24, 500);
-        ctx.fillText(`${sepKeyTime(item.key).toFixed(2)} 秒${item.manual === null ? '' : item.manual ? '・已確認' : '・AI 估計'}`, x + nameW + 16, y + labelH / 2 - 4);
+        ctx.fillText(`${sepKeyTime(item.key).toFixed(2)} 秒${item.manual === null ? '' : item.manual ? '・已確認' : item.rough ? '・AI 粗估' : '・AI 估計'}`, x + nameW + 16, y + labelH / 2 - 4);
         ctx.drawImage(await renderKeyPanel(item.key, pw, ph), x, y + labelH);
       }
       ctx.fillStyle = '#9fb3c2'; ctx.font = font(24, 500); ctx.textBaseline = 'middle';
@@ -2647,7 +2706,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         const blob = await buildResultImage();
         const file = new File([blob], fileName, { type: 'image/png' });
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: '投球結果', text: '前腳落地與出手（PitchFrame）' });
+          await navigator.share({ files: [file], title: '投球結果', text: '投球關鍵四格（PitchFrame）' });
           aiHandoffStatus.textContent = '已開啟分享選單，傳給誰由你決定。';
         } else {
           downloadBlob(blob, fileName);
