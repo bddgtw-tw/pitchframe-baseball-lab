@@ -340,7 +340,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       <!-- Transparent Canvas (simplified baseball skeleton + dynamic angle badges) -->
       <canvas id="mainCanvas" class="absolute inset-0 w-full h-full object-contain pointer-events-none z-10"></canvas>
 
-      <div id="sepBadge" class="hidden absolute left-3 top-3 pointer-events-none rounded-xl px-3 py-2 text-sm font-bold" style="z-index:25;background:rgba(2,6,23,.88);border:1px solid #a3e635;color:#f8fafc"></div>
+      <div id="sepBadge" class="hidden absolute left-3 top-3 pointer-events-none rounded-xl px-3 py-2 text-sm font-bold" style="z-index:25;background:rgba(2,6,23,.88);border:1px solid #ef4444;color:#f8fafc"></div>
 
       <!-- Annotation Canvas (user drawing lines, arrows, circles, notes) -->
       <canvas id="drawCanvas" class="absolute inset-0 w-full h-full object-contain z-20 pointer-events-none"></canvas>
@@ -400,7 +400,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       </div>
       <div id="sepStripRow" class="hidden flex items-center gap-3" style="margin-top:-8px">
         <span class="text-[11px] text-slate-400 w-12 text-right">分離</span>
-        <canvas id="sepStrip" class="flex-1" style="height:18px;cursor:pointer" aria-label="髖肩分離熱度帶：白色是沒拉開，綠色是髖已轉開、肩還留在後面；點一下跳到那一格"></canvas>
+        <canvas id="sepStrip" class="flex-1" style="height:18px;cursor:pointer" aria-label="髖肩分離熱度帶：透明是沒拉開，紅色是髖已轉開、肩還留在後面；點一下跳到那一格"></canvas>
         <span class="w-12"></span>
       </div>
 
@@ -450,7 +450,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
             <span>〰</span>
             <span id="smoothStatusText">補間: 開</span>
           </button>
-          <button id="btnSeparation" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-400 text-xs px-2.5 py-2 rounded-lg border border-slate-700 transition font-medium flex items-center gap-1" title="髖肩分離：兩肩與兩髖四點連成平面，扭開時變綠">
+          <button id="btnSeparation" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-400 text-xs px-2.5 py-2 rounded-lg border border-slate-700 transition font-medium flex items-center gap-1" title="髖肩分離：兩肩與兩髖四點連成平面，沒扭透明、扭開變紅">
             <span>⟲</span>
             <span id="separationStatusText">髖肩分離: 開</span>
           </button>
@@ -1949,14 +1949,14 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     /* ==========================================================================
        髖肩分離（AI 推測，不顯示度數）
-       - 兩肩、兩髖四點：共面＝沒扭（白），扭開＝綠。以「髖中點→肩中點」為脊椎軸，
+       - 兩肩、兩髖四點：共面＝沒扭（透明），扭開＝紅，只用顏色不畫線。以「髖中點→肩中點」為脊椎軸，
          把肩線、髖線投影到垂直脊椎的平面上，兩線夾角就是扭轉；可扣掉軀幹前傾／側傾。
        - 深度是 MediaPipe 從單一畫面推測的，只當趨勢看，所以只呈現顏色與時機，不顯示數字。
        - 看的重點依 Driveline／ASMI：前腳落地時「髖已開、肩還關著」，以及髖先肩後的順序。
        - 門檻是顯示用的選擇，不是標準值；小角度一律當沒扭，避免推測雜訊造成閃爍。
        ========================================================================== */
     const SEP_MIN_VIS = 0.5, SEP_ON_DEG = 10, SEP_FULL_DEG = 35;
-    const SEP_WHITE = [226, 232, 240], SEP_LIME = [163, 230, 53];
+    const SEP_LOW = [248, 113, 113], SEP_HIGH = [220, 38, 38]; // 同一紅色色相，扭越多越深；透明度另外隨扭轉增加
     let separationEnabled = true;
     try { separationEnabled = localStorage.getItem('pf-separation') !== '0'; } catch (_) {}
     let sepCache = null, manualFoot = null;
@@ -1997,7 +1997,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     function median(arr) { const a = arr.slice().sort((x, y) => x - y); return a[a.length >> 1]; }
     function sepLevel(deg) { return deg === null ? null : Math.max(0, Math.min(1, (deg - SEP_ON_DEG) / (SEP_FULL_DEG - SEP_ON_DEG))); }
     function sepColor(t, alpha) {
-      const c = SEP_WHITE.map((w, i) => Math.round(w + (SEP_LIME[i] - w) * t));
+      const c = SEP_LOW.map((w, i) => Math.round(w + (SEP_HIGH[i] - w) * t));
       return `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
     }
     function sepKeyTime(key) { return sourceFrameIndex ? sourceFrameIndex.seekTime(key) : key * fallbackFrameDuration; }
@@ -2069,8 +2069,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (!done) html = '骨架分析完成後，會自動找出前腳落地那一格。';
       else if (sepCache.foot === null) html = '<b>找不到前腳落地</b><br><span class="text-slate-400">請逐格到前腳剛踩地的那一格，按「這格設為落地」。</span>';
       else if (sepCache.footLevel === null) html = '<b>落地這幾格判斷不了</b><br><span class="text-slate-400">肩或髖被擋住、骨架不清楚，所以不上色、不猜。可換一格按「這格設為落地」。</span>';
-      else if (sepCache.footLevel >= 0.5) { border = '#a3e635';
-        html = '<b>前腳落地：髖已轉開、肩還留在後面</b><br><span class="text-slate-400">有做到髖肩分離。接著看熱度帶：綠色應該在落地前後出現，出手前退回白色。</span>'; }
+      else if (sepCache.footLevel >= 0.5) { border = '#ef4444';
+        html = '<b>前腳落地：髖已轉開、肩還留在後面</b><br><span class="text-slate-400">有做到髖肩分離。接著看熱度帶：紅色應該在落地前後出現，出手前退回透明。</span>'; }
       else html = '<b>前腳落地：髖肩幾乎沒有拉開</b><br><span class="text-slate-400">可能是髖還沒開，或肩膀已經跟著開了。逐格看落地前後幾格，比較胸口和皮帶扣的朝向。</span>';
       if (done && sepCache.foot !== null) html += `<br><span class="text-slate-500 text-[11px]">落地點：${sepCache.manual ? '手動標記' : 'AI 自動判斷（不對可手動改）'}</span>`;
       sepVerdict.innerHTML = html;
@@ -2091,7 +2091,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const cell = Math.max(1, w / (lastKey + 1));
       for (const k of sep.keys) {
         const t = sep.level.get(k); if (t === null || t === undefined) continue;
-        ctx.fillStyle = sepColor(t, 0.15 + 0.8 * t);
+        if (!(t > 0)) continue;
+        ctx.fillStyle = sepColor(t, 0.9 * Math.sqrt(t));
         ctx.fillRect(k / (lastKey + 1) * w, y0, Math.ceil(cell), bh);
       }
       if (sep.release !== null) {
@@ -2107,36 +2108,15 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
 
 
-    /* 扭轉張力：像擰毛巾。肩線與髖線之間畫幾條「纖維」，沒扭時直立平行；
-       扭越多，纖維越斜、越交錯，並且越亮、越粗、帶發光。斜的方向依髖→肩的扭轉方向。
-       這是示意張力的視覺語言，不是幾何量測；程度來自 sepLevel（推測扭轉角經平滑後的 0..1）。
+    /* 扭轉張力：只用顏色。四點共面（沒扭）＝透明；扭越多越紅、越不透明。
+       程度來自 sepLevel（推測扭轉角經平滑後的 0..1），不畫線、不顯示數字。
        c = [左肩, 右肩, 右髖, 左髖]（畫面座標） */
-    const FIBER_COUNT = 7;
-    function drawTwistFibers(ctx, c, t, signed) {
-      const dpr = ctx.canvas.width / Math.max(1, ctx.canvas.clientWidth || ctx.canvas.width);
-      const lerp = (p, q, u) => ({ x: p.x + (q.x - p.x) * u, y: p.y + (q.y - p.y) * u });
-      const H = u => lerp(c[3], c[2], u), S = u => lerp(c[0], c[1], u);
-      const tau = 0.9 * t * (signed < 0 ? -1 : 1); // 肩端相對髖端錯開的比例（0＝直立）
+    function drawTwistFill(ctx, c, t) {
+      if (!(t > 0)) return; // 沒扭：完全透明
       ctx.save();
       ctx.beginPath(); c.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath();
-      ctx.fillStyle = sepColor(t, 0.08 + 0.17 * t); ctx.fill();
-      ctx.save(); ctx.clip(); // 斜紋只畫在軀幹四邊形內
-      ctx.lineCap = 'round';
-      ctx.shadowColor = sepColor(1, 0.9); ctx.shadowBlur = 10 * t * dpr;
-      ctx.lineWidth = (1.5 + 2 * t) * dpr; ctx.strokeStyle = sepColor(t, 0.35 + 0.6 * t);
-      const extra = Math.ceil(Math.abs(tau) * FIBER_COUNT) + 1;
-      for (let i = -extra; i <= FIBER_COUNT + extra; i++) {
-        const u = i / FIBER_COUNT;
-        const p0 = H(u), p1 = S(u + tau);
-        const mid = lerp(p0, p1, 0.5), dx = p1.x - p0.x, dy = p1.y - p0.y, len = Math.hypot(dx, dy) || 1;
-        const bow = 0.1 * t * len * (tau < 0 ? -1 : 1); // 中段微彎，像被擰緊的繩
-        ctx.beginPath(); ctx.moveTo(p0.x, p0.y);
-        ctx.quadraticCurveTo(mid.x - dy / len * bow, mid.y + dx / len * bow, p1.x, p1.y); ctx.stroke();
-      }
-      ctx.restore();
-      // 外框：肩線與髖線兩端連線
-      ctx.shadowBlur = 0; ctx.lineWidth = 1.5 * dpr; ctx.strokeStyle = sepColor(t, 0.6);
-      ctx.beginPath(); c.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath(); ctx.stroke();
+      ctx.fillStyle = sepColor(t, 0.78 * Math.sqrt(t)); // 開平方：扭一點就看得出來
+      ctx.fill();
       ctx.restore();
     }
 
@@ -2152,10 +2132,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         ctx.beginPath(); c.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath();
         ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(148,163,184,0.8)'; ctx.lineWidth = 2; ctx.stroke();
       } else {
-        drawTwistFibers(ctx, c, t, sep.signed.get(key) || 0);
+        drawTwistFill(ctx, c, t);
       }
-      ctx.setLineDash([4, 6]); ctx.strokeStyle = 'rgba(248,250,252,0.7)'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo((c[0].x + c[1].x) / 2, (c[0].y + c[1].y) / 2); ctx.lineTo((c[2].x + c[3].x) / 2, (c[2].y + c[3].y) / 2); ctx.stroke();
       ctx.restore();
       // 俯視小圖：沿脊椎往下看，白線＝髖、灰線＝肩，中間色塊＝扭開
       const sg = sep.signed.get(key);
@@ -2167,7 +2145,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         ctx.save();
         ctx.fillStyle = 'rgba(2,6,23,0.8)'; ctx.beginPath(); ctx.arc(cx, cy, r + 6 * dpr, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = '#334155'; ctx.lineWidth = 1.5 * dpr; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = sepColor(t, 0.25 + 0.5 * t);
+        ctx.fillStyle = sepColor(t, 0.8 * Math.sqrt(t));
         ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r * 0.9, Math.min(hipA, shA), Math.max(hipA, shA)); ctx.closePath(); ctx.fill();
         const line = (a, col) => { ctx.strokeStyle = col; ctx.lineWidth = 4 * dpr; ctx.lineCap = 'round';
           ctx.beginPath(); ctx.moveTo(cx - Math.cos(a) * r * 0.85, cy - Math.sin(a) * r * 0.85); ctx.lineTo(cx + Math.cos(a) * r * 0.85, cy + Math.sin(a) * r * 0.85); ctx.stroke(); };
@@ -2184,7 +2162,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       sepBadge.classList.toggle('hidden', !show);
       if (!show) return;
       if (sep.footLevel === null) { sepBadge.textContent = '前腳落地：這幾格判斷不了'; sepBadge.style.borderColor = '#64748b'; }
-      else if (sep.footLevel >= 0.5) { sepBadge.textContent = '前腳落地：髖已開、肩還關著'; sepBadge.style.borderColor = '#a3e635'; }
+      else if (sep.footLevel >= 0.5) { sepBadge.textContent = '前腳落地：髖已開、肩還關著'; sepBadge.style.borderColor = '#ef4444'; }
       else { sepBadge.textContent = '前腳落地：髖肩幾乎沒有拉開'; sepBadge.style.borderColor = '#e2e8f0'; }
     }
     function jumpToKey(key) {
