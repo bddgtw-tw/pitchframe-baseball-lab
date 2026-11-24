@@ -337,10 +337,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       <!-- Slow-motion blend layer: crossfades two real decoded frames (≤0.5× only); never draws skeleton -->
       <canvas id="blendCanvas" class="absolute inset-0 w-full h-full pointer-events-none" style="z-index:5; display:none" aria-hidden="true"></canvas>
 
+      <!-- Separation tint: multiply-blended over the video so the player stays visible (white = no change) -->
+      <canvas id="sepTintCanvas" class="absolute inset-0 w-full h-full pointer-events-none" style="z-index:8; mix-blend-mode:multiply" aria-hidden="true"></canvas>
+
       <!-- Transparent Canvas (simplified baseball skeleton + dynamic angle badges) -->
       <canvas id="mainCanvas" class="absolute inset-0 w-full h-full object-contain pointer-events-none z-10"></canvas>
 
-      <div id="sepBadge" class="hidden absolute left-3 top-3 pointer-events-none rounded-xl px-3 py-2 text-sm font-bold" style="z-index:25;background:rgba(2,6,23,.88);border:1px solid #a3e635;color:#f8fafc"></div>
+      <div id="sepBadge" class="hidden absolute left-3 top-3 pointer-events-none rounded-xl px-3 py-2 text-sm font-bold" style="z-index:25;background:rgba(2,6,23,.88);border:1px solid #ef4444;color:#f8fafc"></div>
 
       <!-- Annotation Canvas (user drawing lines, arrows, circles, notes) -->
       <canvas id="drawCanvas" class="absolute inset-0 w-full h-full object-contain z-20 pointer-events-none"></canvas>
@@ -400,7 +403,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       </div>
       <div id="sepStripRow" class="hidden flex items-center gap-3" style="margin-top:-8px">
         <span class="text-[11px] text-slate-400 w-12 text-right">分離</span>
-        <canvas id="sepStrip" class="flex-1" style="height:18px;cursor:pointer" aria-label="髖肩分離熱度帶：白色是沒拉開，綠色是髖已轉開、肩還留在後面；點一下跳到那一格"></canvas>
+        <canvas id="sepStrip" class="flex-1" style="height:18px;cursor:pointer" aria-label="髖肩分離熱度帶：白色是沒拉開，紅色是髖已轉開、肩還留在後面；點一下跳到那一格"></canvas>
         <span class="w-12"></span>
       </div>
 
@@ -450,7 +453,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
             <span>〰</span>
             <span id="smoothStatusText">補間: 開</span>
           </button>
-          <button id="btnSeparation" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-400 text-xs px-2.5 py-2 rounded-lg border border-slate-700 transition font-medium flex items-center gap-1" title="髖肩分離：兩肩與兩髖四點連成平面，扭開時變綠">
+          <button id="btnSeparation" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-400 text-xs px-2.5 py-2 rounded-lg border border-slate-700 transition font-medium flex items-center gap-1" title="髖肩分離：兩肩與兩髖四點連成平面，沒扭白色、扭開變紅">
             <span>⟲</span>
             <span id="separationStatusText">髖肩分離: 開</span>
           </button>
@@ -682,6 +685,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const smoothStatusText = document.getElementById('smoothStatusText');
     const blendCanvas = document.getElementById('blendCanvas');
     const blendCtx = blendCanvas.getContext('2d');
+    const sepTintCanvas = document.getElementById('sepTintCanvas');
+    const sepTintCtx = sepTintCanvas.getContext('2d');
     const scrubber = document.getElementById('scrubber');
     const timeCurrent = document.getElementById('timeCurrent');
     const timeDuration = document.getElementById('timeDuration');
@@ -1743,6 +1748,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         drawCanvas.height = h;
         blendCanvas.width = w;
         blendCanvas.height = h;
+        sepTintCanvas.width = w;
+        sepTintCanvas.height = h;
       }
       renderStage();
       renderAnnotations();
@@ -1949,14 +1956,14 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     /* ==========================================================================
        髖肩分離（AI 推測，不顯示度數）
-       - 兩肩、兩髖四點：共面＝沒扭（白），扭開＝綠。以「髖中點→肩中點」為脊椎軸，
+       - 兩肩、兩髖四點：共面＝沒扭（白），扭開＝紅；透明度固定，只變顏色、不畫線。以「髖中點→肩中點」為脊椎軸，
          把肩線、髖線投影到垂直脊椎的平面上，兩線夾角就是扭轉；可扣掉軀幹前傾／側傾。
        - 深度是 MediaPipe 從單一畫面推測的，只當趨勢看，所以只呈現顏色與時機，不顯示數字。
        - 看的重點依 Driveline／ASMI：前腳落地時「髖已開、肩還關著」，以及髖先肩後的順序。
        - 門檻是顯示用的選擇，不是標準值；小角度一律當沒扭，避免推測雜訊造成閃爍。
        ========================================================================== */
     const SEP_MIN_VIS = 0.5, SEP_ON_DEG = 10, SEP_FULL_DEG = 35;
-    const SEP_WHITE = [226, 232, 240], SEP_LIME = [163, 230, 53];
+    const SEP_LOW = [255, 255, 255], SEP_HIGH = [239, 68, 68], SEP_ALPHA = 0.85; // 白 → 紅，透明度固定；以相乘疊在影片上，白色＝不變，紅色＝染紅但球員仍清楚
     let separationEnabled = true;
     try { separationEnabled = localStorage.getItem('pf-separation') !== '0'; } catch (_) {}
     let sepCache = null, manualFoot = null;
@@ -1997,7 +2004,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     function median(arr) { const a = arr.slice().sort((x, y) => x - y); return a[a.length >> 1]; }
     function sepLevel(deg) { return deg === null ? null : Math.max(0, Math.min(1, (deg - SEP_ON_DEG) / (SEP_FULL_DEG - SEP_ON_DEG))); }
     function sepColor(t, alpha) {
-      const c = SEP_WHITE.map((w, i) => Math.round(w + (SEP_LIME[i] - w) * t));
+      const c = SEP_LOW.map((w, i) => Math.round(w + (SEP_HIGH[i] - w) * t));
       return `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
     }
     function sepKeyTime(key) { return sourceFrameIndex ? sourceFrameIndex.seekTime(key) : key * fallbackFrameDuration; }
@@ -2069,8 +2076,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (!done) html = '骨架分析完成後，會自動找出前腳落地那一格。';
       else if (sepCache.foot === null) html = '<b>找不到前腳落地</b><br><span class="text-slate-400">請逐格到前腳剛踩地的那一格，按「這格設為落地」。</span>';
       else if (sepCache.footLevel === null) html = '<b>落地這幾格判斷不了</b><br><span class="text-slate-400">肩或髖被擋住、骨架不清楚，所以不上色、不猜。可換一格按「這格設為落地」。</span>';
-      else if (sepCache.footLevel >= 0.5) { border = '#a3e635';
-        html = '<b>前腳落地：髖已轉開、肩還留在後面</b><br><span class="text-slate-400">有做到髖肩分離。接著看熱度帶：綠色應該在落地前後出現，出手前退回白色。</span>'; }
+      else if (sepCache.footLevel >= 0.5) { border = '#ef4444';
+        html = '<b>前腳落地：髖已轉開、肩還留在後面</b><br><span class="text-slate-400">有做到髖肩分離。接著看熱度帶：紅色應該在落地前後出現，出手前退回白色。</span>'; }
       else html = '<b>前腳落地：髖肩幾乎沒有拉開</b><br><span class="text-slate-400">可能是髖還沒開，或肩膀已經跟著開了。逐格看落地前後幾格，比較胸口和皮帶扣的朝向。</span>';
       if (done && sepCache.foot !== null) html += `<br><span class="text-slate-500 text-[11px]">落地點：${sepCache.manual ? '手動標記' : 'AI 自動判斷（不對可手動改）'}</span>`;
       sepVerdict.innerHTML = html;
@@ -2091,7 +2098,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const cell = Math.max(1, w / (lastKey + 1));
       for (const k of sep.keys) {
         const t = sep.level.get(k); if (t === null || t === undefined) continue;
-        ctx.fillStyle = sepColor(t, 0.15 + 0.8 * t);
+        ctx.fillStyle = sepColor(t, 0.85); // 熱度帶：白 → 紅
         ctx.fillRect(k / (lastKey + 1) * w, y0, Math.ceil(cell), bh);
       }
       if (sep.release !== null) {
@@ -2106,6 +2113,19 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       }
     }
 
+
+    /* 扭轉張力：只用顏色。畫在 sepTintCanvas（mix-blend-mode: multiply），透明度固定；
+       四點共面（沒扭）＝白＝影片不變，扭越多越紅＝那一塊被染紅，球員的衣服與輪廓仍看得見。
+       程度來自 sepLevel（推測扭轉角經平滑後的 0..1），不畫線、不顯示數字。
+       c = [左肩, 右肩, 右髖, 左髖]（畫面座標） */
+    function drawTwistFill(ctx, c, t) {
+      ctx.save();
+      ctx.beginPath(); c.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath();
+      ctx.fillStyle = sepColor(t, SEP_ALPHA);
+      ctx.fill();
+      ctx.restore();
+    }
+
     function drawSeparationOverlay(ctx, lm) {
       const sep = getSeparation(); if (!sep || !lm) return;
       const key = getPoseCacheKey(displayedFrameTime());
@@ -2114,15 +2134,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const c = pts.map(p => mapVideoToCanvas(p.x, p.y, ctx.canvas));
       const t = sep.level.get(key);
       ctx.save();
-      ctx.beginPath(); c.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath();
       if (t === null || t === undefined) {
+        ctx.beginPath(); c.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath();
         ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(148,163,184,0.8)'; ctx.lineWidth = 2; ctx.stroke();
       } else {
-        ctx.fillStyle = sepColor(t, 0.18 + 0.47 * t); ctx.fill();
-        ctx.strokeStyle = sepColor(t, 0.9); ctx.lineWidth = 2; ctx.stroke();
+        drawTwistFill(sepTintCtx, c, t);
       }
-      ctx.setLineDash([4, 6]); ctx.strokeStyle = 'rgba(248,250,252,0.7)'; ctx.lineWidth = 1.5;
-      ctx.beginPath(); ctx.moveTo((c[0].x + c[1].x) / 2, (c[0].y + c[1].y) / 2); ctx.lineTo((c[2].x + c[3].x) / 2, (c[2].y + c[3].y) / 2); ctx.stroke();
       ctx.restore();
       // 俯視小圖：沿脊椎往下看，白線＝髖、灰線＝肩，中間色塊＝扭開
       const sg = sep.signed.get(key);
@@ -2134,7 +2151,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         ctx.save();
         ctx.fillStyle = 'rgba(2,6,23,0.8)'; ctx.beginPath(); ctx.arc(cx, cy, r + 6 * dpr, 0, Math.PI * 2); ctx.fill();
         ctx.strokeStyle = '#334155'; ctx.lineWidth = 1.5 * dpr; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = sepColor(t, 0.25 + 0.5 * t);
+        ctx.fillStyle = sepColor(t, SEP_ALPHA + 0.2);
         ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r * 0.9, Math.min(hipA, shA), Math.max(hipA, shA)); ctx.closePath(); ctx.fill();
         const line = (a, col) => { ctx.strokeStyle = col; ctx.lineWidth = 4 * dpr; ctx.lineCap = 'round';
           ctx.beginPath(); ctx.moveTo(cx - Math.cos(a) * r * 0.85, cy - Math.sin(a) * r * 0.85); ctx.lineTo(cx + Math.cos(a) * r * 0.85, cy + Math.sin(a) * r * 0.85); ctx.stroke(); };
@@ -2151,7 +2168,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       sepBadge.classList.toggle('hidden', !show);
       if (!show) return;
       if (sep.footLevel === null) { sepBadge.textContent = '前腳落地：這幾格判斷不了'; sepBadge.style.borderColor = '#64748b'; }
-      else if (sep.footLevel >= 0.5) { sepBadge.textContent = '前腳落地：髖已開、肩還關著'; sepBadge.style.borderColor = '#a3e635'; }
+      else if (sep.footLevel >= 0.5) { sepBadge.textContent = '前腳落地：髖已開、肩還關著'; sepBadge.style.borderColor = '#ef4444'; }
       else { sepBadge.textContent = '前腳落地：髖肩幾乎沒有拉開'; sepBadge.style.borderColor = '#e2e8f0'; }
     }
     function jumpToKey(key) {
@@ -2198,6 +2215,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const ch = mainCanvas.height;
 
       mainCtx.clearRect(0, 0, cw, ch);
+      sepTintCtx.clearRect(0, 0, sepTintCanvas.width, sepTintCanvas.height);
       if (scrubSession && scrubPair && scrubPair.source === sourceGeneration) {
         const bounds = getRenderBounds(mainCanvas);
         mainCtx.fillStyle = '#020617'; mainCtx.fillRect(0,0,cw,ch);
