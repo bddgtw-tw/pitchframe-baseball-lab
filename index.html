@@ -317,6 +317,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         <span>選擇影片</span>
       </button>
 
+      <button id="btnInstallApp" type="button" class="hidden items-center gap-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-100 text-xs font-bold px-3 py-2 rounded-lg border border-sky-400/40">
+        <span>⬇</span>
+        <span>安裝 App</span>
+      </button>
+
       <a class="header-link" href="https://github.com/bddgtw-tw/pitchframe-baseball-lab" target="_blank" rel="noopener" aria-label="到 GitHub 查看 PitchFrame 專案">GitHub ★</a>
 
       <button id="btnClearVideo" class="hidden flex items-center gap-1 bg-rose-500/20 hover:bg-rose-500/30 active:scale-95 text-rose-200 text-xs font-semibold px-2.5 py-2 rounded-lg border border-rose-500/40 transition" title="清除目前載入的影片">
@@ -851,6 +856,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const btnExportVideoText = document.getElementById('btnExportVideoText');
     const btnExportAI = document.getElementById('btnExportAI');
     const btnShareApp = document.getElementById('btnShareApp');
+    const btnInstallApp = document.getElementById('btnInstallApp');
     const exportModal = document.getElementById('exportModal');
     const exportFormatNotice = document.getElementById('exportFormatNotice');
     const exportProgressBar = document.getElementById('exportProgressBar');
@@ -3430,6 +3436,36 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         if (err && err.name !== 'AbortError') alert(`無法開啟分享功能，請複製網址：${shareData.url}`);
       }
     });
+
+    let deferredInstallPrompt = null;
+    const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+    const isIosSafari = /iPhone|iPad|iPod/i.test(navigator.userAgent || '') && /Safari/i.test(navigator.userAgent || '') && !/CriOS|FxiOS|EdgiOS/i.test(navigator.userAgent || '');
+    function syncInstallButton() {
+      const show = !isStandalone() && (!!deferredInstallPrompt || isIosSafari);
+      btnInstallApp.classList.toggle('hidden', !show);
+      btnInstallApp.classList.toggle('flex', show);
+    }
+    window.addEventListener('beforeinstallprompt', event => {
+      event.preventDefault();
+      deferredInstallPrompt = event;
+      syncInstallButton();
+    });
+    window.addEventListener('appinstalled', () => {
+      deferredInstallPrompt = null;
+      syncInstallButton();
+    });
+    btnInstallApp.addEventListener('click', async () => {
+      if (isIosSafari) {
+        alert('在 Safari 底部按「分享」圖示，再選「加入主畫面」。之後從主畫面開啟 PitchFrame，就能像 App 一樣全螢幕使用。');
+        return;
+      }
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      await deferredInstallPrompt.userChoice;
+      deferredInstallPrompt = null;
+      syncInstallButton();
+    });
+    syncInstallButton();
 
     function textMetric(el) { return el && el.textContent ? el.textContent.trim() : '資料不足'; }
     let progressHistory = [];
