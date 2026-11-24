@@ -155,16 +155,26 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     #stageContainer { position: relative; width: 100%; max-width: 100%; margin: 0 auto; aspect-ratio: 16 / 9;
       max-height: 42svh; background: #000; border-radius: 14px; overflow: hidden; }
     #videoPlayer, #mainCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-    #videoPlayer { object-fit: contain; z-index: 0; pointer-events: none; background: #000; }
+    /* 影片元素的位置與大小由 layoutVideoElement() 依框選範圍設定，放大時超出框的部分被裁掉 */
+    #videoPlayer { object-fit: fill; z-index: 0; pointer-events: none; background: #000; }
     #mainCanvas { z-index: 10; pointer-events: none; }
-    #pickOverlay { position: absolute; inset: 0; z-index: 35; cursor: crosshair; }
+    #pickOverlay { position: absolute; inset: 0; z-index: 35; cursor: crosshair; touch-action: none; }
+    #cropBox { position: absolute; border: 2px solid var(--accent); border-radius: 4px; cursor: move;
+      box-shadow: 0 0 0 9999px rgba(2, 6, 23, .55); }
+    #cropBox span { position: absolute; width: 28px; height: 28px; border: 4px solid var(--accent); }
+    #cropBox [data-h="tl"] { left: -5px; top: -5px; border-right: 0; border-bottom: 0; cursor: nwse-resize; }
+    #cropBox [data-h="tr"] { right: -5px; top: -5px; border-left: 0; border-bottom: 0; cursor: nesw-resize; }
+    #cropBox [data-h="bl"] { left: -5px; bottom: -5px; border-right: 0; border-top: 0; cursor: nesw-resize; }
+    #cropBox [data-h="br"] { right: -5px; bottom: -5px; border-left: 0; border-top: 0; cursor: nwse-resize; }
+    #cropBox span::after { content: ''; position: absolute; inset: -10px; } /* 手指好按 */
     /* 選人提示放在畫面底部的一條，不遮住孩子；說明文字在影片下方 */
-    #pickHint { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; align-items: center; justify-content: space-between;
-      gap: 10px; padding: 6px 6px 6px 12px; border-radius: 12px; background: rgba(2, 6, 23, .82); cursor: default; }
+    #pickHint { margin-top: 8px; display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; padding: 6px 6px 6px 12px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
+    #pickHint.hidden { display: none; }
     #pickTitle { font-size: 15px; color: var(--accent); }
     #pickSub { display: none; }
-    #btnPickWhole { min-height: 40px; padding: 0 12px; border-radius: 9px; font-size: 14px; font-weight: 600;
-      background: #1e293b; border: 1px solid #475569; white-space: nowrap; }
+    #btnStartAnalysis { min-height: 40px; padding: 0 14px; border-radius: 9px; font-size: 15px; font-weight: 800;
+      background: var(--accent); color: var(--accent-ink); white-space: nowrap; }
     #analysisPill { position: absolute; left: 10px; top: 10px; z-index: 25; pointer-events: none; padding: 6px 12px; border-radius: 999px;
       background: rgba(2, 6, 23, .85); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
 
@@ -287,14 +297,16 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           <div id="stageContainer">
             <video id="videoPlayer" playsinline webkit-playsinline crossorigin="anonymous" tabindex="-1" aria-label="投球影片"></video>
             <canvas id="mainCanvas" aria-hidden="true"></canvas>
-            <div id="pickOverlay" class="hidden" role="dialog" aria-label="選擇要分析的球員">
-              <div id="pickHint">
-                <strong id="pickTitle">點一下你的孩子</strong>
-                <span id="pickSub">看不到他？先拖下面的時間軸換一格再點</span>
-                <button id="btnPickWhole" type="button">畫面只有他一人</button>
-              </div>
+            <div id="pickOverlay" class="hidden" role="dialog" aria-label="框選要分析的球員">
+              <div id="cropBox"><span data-h="tl"></span><span data-h="tr"></span><span data-h="bl"></span><span data-h="br"></span></div>
             </div>
             <div id="analysisPill" class="hidden" role="status" aria-live="polite"></div>
+          </div>
+          <!-- 框選提示放在影片下方，不擋住框的四個角 -->
+          <div id="pickHint" class="hidden">
+            <strong id="pickTitle">框住孩子投球的範圍</strong>
+            <span id="pickSub">拖動框或四個角，框住孩子整個投球動作</span>
+            <button id="btnStartAnalysis" type="button">開始分析</button>
           </div>
           <div id="timelineRow">
             <span id="timeFrameBadge">第 1 格</span>
@@ -349,7 +361,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           <div class="more-links">
             <button id="btnExportVideo" type="button"><span id="btnExportVideoText">存骨架影片</span></button>
             <button id="btnShareAI" type="button"><span id="btnShareAIText">給 AI 的文字摘要</span></button>
-            <button id="btnRepick" type="button">重新選人</button>
+            <button id="btnRepick" type="button">重新框選</button>
           </div>
           <p class="fineprint">點畫面可隱藏／顯示骨架。結果是 AI 估計，用來和教練討論，不是評分或醫療判斷。</p>
         </div>
@@ -791,22 +803,71 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
 
     /* ---------- 選擇要分析的球員 ---------- */
-    let targetChoice = null; // { source, mode: 'point' | 'full', nx, ny, time }
+    let targetChoice = null; // { source, mode: 'point' | 'full', nx, ny, box, time }
     const pickOverlay = document.getElementById('pickOverlay');
     const pickTitle = document.getElementById('pickTitle');
     const pickSub = document.getElementById('pickSub');
-    const btnPickWhole = document.getElementById('btnPickWhole');
+    const btnStartAnalysis = document.getElementById('btnStartAnalysis');
+    const pickHint = document.getElementById('pickHint');
+    const cropBoxEl = document.getElementById('cropBox');
+    // 家長框選的範圍（整張影片的 0..1 座標）。分析從框裡找孩子，結果畫面也放大到這個範圍。
+    let pickBox = null, pickBoxSource = -1, pickBoxTouched = false, suggestBusy = false;
+    const BOX_MIN = 0.08;
+    const clamp01 = (v, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, v));
     const btnRepick = document.getElementById('btnRepick');
     function hasTargetChoice() { return !!(targetChoice && targetChoice.source === sourceGeneration); }
     function showPickOverlay(title, sub) {
-      pickTitle.textContent = title || '點一下你的孩子';
-      pickSub.textContent = sub || '看不到他？先拖下面的時間軸換一格再點';
-      pickOverlay.classList.remove('hidden');
+      setViewRect(null);
+      if (pickBoxSource !== sourceGeneration || !pickBox) {
+        pickBox = { x: 0.15, y: 0.05, w: 0.7, h: 0.9 };
+        pickBoxSource = sourceGeneration; pickBoxTouched = false;
+      }
+      pickTitle.textContent = title || '框住孩子投球的範圍';
+      pickSub.textContent = sub || '拖動框或四個角，框住孩子整個投球動作';
+      pickOverlay.classList.remove('hidden'); pickHint.classList.remove('hidden');
+      renderCropBox();
       showPill('');
       setStep('analyze');
-      setHint(sub || '在畫面上點一下孩子，AI 會一路追蹤他。看不到他？先拖時間軸換一格再點。');
+      setHint(sub || '拖動框或四個角，框住孩子從抬腿到出手的整個範圍，再按「開始分析」。框得越貼，孩子在結果裡越大。');
+      suggestPickBox();
     }
-    function hidePickOverlay() { pickOverlay.classList.add('hidden'); }
+    function renderCropBox() {
+      if (!pickBox || pickOverlay.classList.contains('hidden') || !mainCanvas.width) return;
+      const b = getRenderBounds(), k = stageContainer.clientWidth / mainCanvas.width;
+      cropBoxEl.style.left = `${(b.destX + pickBox.x * b.destW) * k}px`;
+      cropBoxEl.style.top = `${(b.destY + pickBox.y * b.destH) * k}px`;
+      cropBoxEl.style.width = `${pickBox.w * b.destW * k}px`;
+      cropBoxEl.style.height = `${pickBox.h * b.destH * k}px`;
+    }
+    // 模型載入後，自動把框移到畫面裡偵測到的人身上（家長還沒動過框才會移）
+    async function suggestPickBox() {
+      if (!isPoseModelReady || !pose || suggestBusy || pickBoxTouched || hasTargetChoice() || !currentVideoObjectUrl) return;
+      if (isProcessingPose || analysisSendBusy || (trackJob && trackJob.running)) return;
+      const source = sourceGeneration, engine = pose, url = currentVideoObjectUrl;
+      suggestBusy = true;
+      try {
+        if (analysisVideo.getAttribute('src') !== url) {
+          const loaded = waitForMediaEvent(analysisVideo, 'loadeddata', 20000, '分析用影片載入逾時');
+          analysisVideo.src = url;
+          analysisVideo.load();
+          await loaded;
+        }
+        await seekAnalysisVideo(video.currentTime || 0);
+        const W = analysisVideo.videoWidth || 1, H = analysisVideo.videoHeight || 1;
+        await withPoseTimeout(Promise.resolve(engine.reset()), 10000, '模型重設逾時');
+        const lm = await inferCrop(engine, { cx: W / 2, cy: H / 2, side: Math.max(W, H) });
+        if (source !== sourceGeneration || pickBoxTouched || hasTargetChoice() || pickOverlay.classList.contains('hidden')) return;
+        const b = lm && landmarkBounds(lm, W, H);
+        if (!b) return;
+        // 投球時會往前跨一大步，框要比站姿寬：高約 1.4 倍身高、寬約 2 倍身高
+        const bodyH = Math.max(b.y1 - b.y0, b.x1 - b.x0);
+        const w = clamp01(bodyH * 2.0 / W, BOX_MIN), h = clamp01(bodyH * 1.4 / H, BOX_MIN);
+        pickBox = { x: clamp01(b.cx / W - w / 2, 0, 1 - w), y: clamp01(b.cy / H - h / 2, 0, 1 - h), w, h };
+        renderCropBox();
+      } catch (_) { /* 找不到就維持預設框，家長自己拖 */ }
+      finally { suggestBusy = false; }
+    }
+    function hidePickOverlay() { pickOverlay.classList.add('hidden'); pickHint.classList.add('hidden'); }
     function chooseTarget(choice) {
       if (!video.videoWidth || !currentVideoObjectUrl) return;
       if (isPlaying) pauseVideo(false, false);
@@ -816,22 +877,64 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       hasEverDetectedRealPerson = false; smoothedCalloutBox = null;
       targetChoice = { source: sourceGeneration, ...choice };
       hidePickOverlay();
-      showPill(choice.mode === 'point' ? '正在找你點的孩子…' : '準備分析…');
+      setViewRect(choice.box || null);
+      showPill(choice.mode === 'point' ? '正在找框裡的孩子…' : '準備分析…');
       setHint(isPoseModelReady ? 'AI 正在逐格找出骨架，通常 10 到 30 秒。影片不會上傳。' : '正在載入 AI 模型（第一次約 24 MB），載入後自動開始分析。');
       renderStage();
       startTrackAnalysis();
     }
-    pickOverlay.addEventListener('click', (e) => {
-      if (e.target.closest('#pickHint')) return;
+    // 框選：拖框內移動、拖四個角改大小、在框外拖一下重畫一個框、在框外點一下把框移過去
+    let boxDrag = null;
+    function pointerToVideo(e) {
       const rect = mainCanvas.getBoundingClientRect();
-      const cx = (e.clientX - rect.left) * mainCanvas.width / rect.width;
-      const cy = (e.clientY - rect.top) * mainCanvas.height / rect.height;
-      const b = getRenderBounds();
-      if (cx < b.destX || cx > b.destX + b.destW || cy < b.destY || cy > b.destY + b.destH) return; // 點在影片外
-      const p = mapCanvasToVideo(cx, cy);
-      chooseTarget({ mode: 'point', nx: p.x, ny: p.y, time: video.currentTime || 0 });
+      return mapCanvasToVideo((e.clientX - rect.left) * mainCanvas.width / rect.width, (e.clientY - rect.top) * mainCanvas.height / rect.height);
+    }
+    pickOverlay.addEventListener('pointerdown', (e) => {
+      if (!pickBox) return;
+      const handle = e.target.closest('[data-h]');
+      boxDrag = { mode: handle ? handle.dataset.h : e.target.closest('#cropBox') ? 'move' : 'new',
+        start: pointerToVideo(e), orig: { ...pickBox }, moved: false, id: e.pointerId };
+      try { pickOverlay.setPointerCapture(e.pointerId); } catch (_) {}
+      e.preventDefault();
     });
-    btnPickWhole.addEventListener('click', (e) => { e.stopPropagation(); chooseTarget({ mode: 'full', time: 0 }); });
+    pickOverlay.addEventListener('pointermove', (e) => {
+      if (!boxDrag || e.pointerId !== boxDrag.id) return;
+      const p = pointerToVideo(e), o = boxDrag.orig;
+      const dx = p.x - boxDrag.start.x, dy = p.y - boxDrag.start.y;
+      if (!boxDrag.moved && Math.hypot(dx, dy) < 0.015) return;
+      boxDrag.moved = true; pickBoxTouched = true;
+      if (boxDrag.mode === 'move') {
+        pickBox = { ...o, x: clamp01(o.x + dx, 0, 1 - o.w), y: clamp01(o.y + dy, 0, 1 - o.h) };
+      } else if (boxDrag.mode === 'new') {
+        const x0 = Math.min(boxDrag.start.x, p.x), y0 = Math.min(boxDrag.start.y, p.y);
+        const w = Math.max(BOX_MIN, Math.abs(dx)), h = Math.max(BOX_MIN, Math.abs(dy));
+        pickBox = { x: clamp01(x0, 0, 1 - w), y: clamp01(y0, 0, 1 - h), w, h };
+      } else {
+        let x0 = o.x, y0 = o.y, x1 = o.x + o.w, y1 = o.y + o.h;
+        if (boxDrag.mode.includes('l')) x0 = clamp01(p.x, 0, x1 - BOX_MIN); else x1 = clamp01(p.x, x0 + BOX_MIN, 1);
+        if (boxDrag.mode.includes('t')) y0 = clamp01(p.y, 0, y1 - BOX_MIN); else y1 = clamp01(p.y, y0 + BOX_MIN, 1);
+        pickBox = { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+      }
+      renderCropBox();
+    });
+    const endBoxDrag = (e) => {
+      if (!boxDrag || e.pointerId !== boxDrag.id) return;
+      if (boxDrag.mode === 'new' && !boxDrag.moved) {
+        const o = boxDrag.orig, p = boxDrag.start;
+        pickBox = { ...o, x: clamp01(p.x - o.w / 2, 0, 1 - o.w), y: clamp01(p.y - o.h / 2, 0, 1 - o.h) };
+        pickBoxTouched = true;
+        renderCropBox();
+      }
+      boxDrag = null;
+    };
+    pickOverlay.addEventListener('pointerup', endBoxDrag);
+    pickOverlay.addEventListener('pointercancel', endBoxDrag);
+    btnStartAnalysis.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (!pickBox) return;
+      const box = { ...pickBox };
+      chooseTarget({ mode: 'point', nx: box.x + box.w / 2, ny: box.y + box.h / 2, box, time: video.currentTime || 0 });
+    });
     btnRepick.addEventListener('click', () => {
       if (!video.videoWidth) return;
       clearPoseError();
@@ -920,7 +1023,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const n = frames.length;
       try {
         // 等目前的即時辨識或上一個分析的送出結束，避免兩個工作共用同一個模型
-        while (isProcessingPose || analysisSendBusy) {
+        while (isProcessingPose || analysisSendBusy || suggestBusy) {
           await new Promise(resolve => setTimeout(resolve, 16));
           if (stale()) return;
         }
@@ -972,9 +1075,17 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           const tapX = choice.nx * W, tapY = choice.ny * H, maxSide = Math.max(W, H) * 1.3;
           await seekAnalysisVideo(frames[i0].seekTime);
           if (stale()) return;
-          // 1) 在點的位置試幾種裁切大小，找出「身體範圍包含點擊位置」的那個人
+          // 1) 先看整個框裡的人；找不到再在框中心試幾種裁切大小，找出「身體範圍包含點擊位置」的那個人
           let seed = null;
-          for (const f of [0.22, 0.35, 0.55, 0.8, 1.15]) {
+          if (choice.box) {
+            const bx = choice.box;
+            await withPoseTimeout(Promise.resolve(engine.reset()), 10000, '模型重設逾時');
+            const lm = await inferCrop(engine, { cx: tapX, cy: tapY, side: Math.max(bx.w * W, bx.h * H) });
+            if (stale()) return;
+            const b = lm && landmarkBounds(lm, W, H);
+            if (b && b.cx >= bx.x * W && b.cx <= (bx.x + bx.w) * W && b.cy >= bx.y * H && b.cy <= (bx.y + bx.h) * H) seed = { score: 0, b };
+          }
+          for (const f of seed ? [] : [0.22, 0.35, 0.55, 0.8, 1.15]) {
             await withPoseTimeout(Promise.resolve(engine.reset()), 10000, '模型重設逾時');
             const lm = await inferCrop(engine, { cx: tapX, cy: tapY, side: Math.max(W, H) * f });
             if (stale()) return;
@@ -989,7 +1100,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           }
           if (!seed || seed.score >= 10) {
             trackJob = null; targetChoice = null;
-            showPickOverlay('這裡沒有找到孩子', '請點在他身上，或拖時間軸換一格他比較清楚的畫面再點。');
+            showPickOverlay('框裡沒有找到孩子', '請把框移到孩子身上，或拖時間軸換一格他比較清楚的畫面再按開始分析。');
             renderStage();
             return;
           }
@@ -1047,7 +1158,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         job.failed = true;
         showPill('');
         reportPoseStatus('分析中斷',
-          String(err.message || err) + '。已完成的部分仍可使用；可按「重新選人」或「重新載入 AI」重試。', true);
+          String(err.message || err) + '。已完成的部分仍可使用；可按「重新框選」或「重新載入 AI」重試。', true);
         setStep('result');
       } finally {
         if (engine === pose && choice.mode === 'point') {
@@ -1146,6 +1257,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           reportPoseStatus('AI 模型已載入', '模型初始化完成；等待可解碼影片影格。');
           triggerPoseInference();
           startTrackAnalysis();
+          if (!pickOverlay.classList.contains('hidden')) suggestPickBox();
         } catch (err) {
           if (epoch !== poseEpoch) return;
           isPoseModelReady = false;
@@ -1318,7 +1430,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
       poseCache.clear(); worldCache.clear(); resetSeparation();
       resetAnalysisVideo();
-      targetChoice = null; hidePickOverlay();
+      targetChoice = null; hidePickOverlay(); setViewRect(null); pickBox = null;
       smoothedCalloutBox = null;
       hasEverDetectedRealPerson = false;
       lastValidLandmarks = null;
@@ -1371,7 +1483,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       // 重置狀態
       poseCache.clear(); worldCache.clear(); resetSeparation();
       cancelTrackAnalysis();
-      targetChoice = null; hidePickOverlay();
+      targetChoice = null; hidePickOverlay(); setViewRect(null); pickBox = null;
       smoothedCalloutBox = null;
       hasEverDetectedRealPerson = false;
       lastValidLandmarks = null;
@@ -1418,7 +1530,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         video.currentTime = 0;
         pauseVideo();
 
-        // 先請家長點選要分析的球員，再開始分析
+        // 先請家長框選要分析的球員，再開始分析
         showPickOverlay();
       };
 
@@ -1429,6 +1541,27 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       };
     }
 
+    // 放大顯示：viewRect 是要填滿畫面的影片範圍（0..1）。null 表示整張影片。
+    let viewRect = null;
+    function viewAspect() {
+      const vw = video.videoWidth || 16, vh = video.videoHeight || 9, r = viewRect || { w: 1, h: 1 };
+      return (vw * r.w) / (vh * r.h);
+    }
+    function setViewRect(r) {
+      viewRect = r && r.w > 0 && r.h > 0 && (r.w < 0.999 || r.h < 0.999) ? { x: r.x, y: r.y, w: r.w, h: r.h } : null;
+      if (video.videoWidth && video.videoHeight) {
+        const vw = video.videoWidth, vh = video.videoHeight, v = viewRect || { w: 1, h: 1 };
+        stageContainer.style.aspectRatio = `${Math.round(vw * v.w)} / ${Math.round(vh * v.h)}`;
+      }
+      resizeCanvases();
+    }
+    // 讓底下的 <video> 和畫布用同一個 getRenderBounds，放大後骨架仍對得準
+    function layoutVideoElement() {
+      if (!video.videoWidth || !mainCanvas.width) return;
+      const b = getRenderBounds(mainCanvas), k = stageContainer.clientWidth / mainCanvas.width;
+      video.style.left = `${b.destX * k}px`; video.style.top = `${b.destY * k}px`;
+      video.style.width = `${b.destW * k}px`; video.style.height = `${b.destH * k}px`;
+    }
     function resizeCanvases() {
       // 限制手機端 DPR 上限，大幅降低透明疊加層的像素填充負載
       const dpr = Math.min(window.devicePixelRatio || 1, isMobileDevice ? 1.5 : 2);
@@ -1439,6 +1572,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         mainCanvas.width = w;
         mainCanvas.height = h;
       }
+      layoutVideoElement();
+      renderCropBox();
       renderStage();
     }
 
@@ -1448,8 +1583,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
     video.addEventListener('loadedmetadata', () => {
       if (video.videoWidth && video.videoHeight) {
-        stageContainer.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
-        resizeCanvases();
+        setViewRect(hasTargetChoice() && targetChoice.box ? targetChoice.box : null);
       }
     });
 
@@ -1460,12 +1594,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const vw = video.videoWidth || cw;
       const vh = video.videoHeight || ch;
 
-      // 嚴格採用統一 scale 係數，以完整影片原生長寬比為準
-      const scale = Math.min(cw / vw, ch / vh);
+      // 嚴格採用統一 scale 係數；有框選時讓框選範圍置中填滿畫面，框外的部分畫在畫布外被裁掉
+      const r = viewRect || { x: 0, y: 0, w: 1, h: 1 };
+      const scale = Math.min(cw / (vw * r.w), ch / (vh * r.h));
       const destW = vw * scale;
       const destH = vh * scale;
-      const destX = (cw - destW) / 2;
-      const destY = (ch - destH) / 2;
+      const destX = (cw - vw * r.w * scale) / 2 - r.x * destW;
+      const destY = (ch - vh * r.h * scale) / 2 - r.y * destH;
 
       return { destX, destY, destW, destH, vw, vh, scale };
     }
@@ -2661,7 +2796,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (sep && sep.mer !== null) items.push({ key: sep.mer, name: '最大外旋', manual: sep.manualMer, rough: sep.merRough });
       if (sep && sep.release !== null) items.push({ key: sep.release, name: '出手', manual: sep.manualRelease });
       if (!items.length) items.push({ key: currentManualEventKey(), name: '目前畫面', manual: null });
-      const aspect = (video.videoWidth || 16) / (video.videoHeight || 9);
+      const aspect = viewAspect();
       // 1–2 格：直式影片並排、橫式上下排；3–4 格一律排成 2×2，LINE 預覽時每格仍夠大。
       const grid = items.length > 2;
       const sideBySide = !grid && aspect < 1.1 && items.length > 1;
@@ -2825,7 +2960,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       }
       if (isExportingVideo) return;
       if (analysisActive()) { alert('骨架正在整段分析中，完成後即可匯出（不需重新分析）。'); return; }
-      if (showSkeleton && !hasTargetChoice()) { alert('請先在影片上點選要分析的球員。'); return; }
+      if (showSkeleton && !hasTargetChoice()) { alert('請先在影片上框選要分析的球員。'); return; }
 
       // 1. 偵測瀏覽器真實支援格式（絕不將 WebM 假裝為 MP4）
       let mimeType = 'video/webm';
@@ -2908,10 +3043,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
         const exportCanvas = document.createElement('canvas');
         const maxEdge = 1920;
-        const scale = Math.min(1, maxEdge / Math.max(video.videoWidth, video.videoHeight));
-        exportCanvas.width = Math.max(1, Math.round(video.videoWidth * scale));
-        exportCanvas.height = Math.max(1, Math.round(video.videoHeight * scale));
+        // 有框選時只輸出框選範圍；小範圍放大到至少 720 像素，孩子在影片裡也夠大
+        const viewW = video.videoWidth * (viewRect ? viewRect.w : 1), viewH = video.videoHeight * (viewRect ? viewRect.h : 1);
+        const scale = Math.min(maxEdge / Math.max(viewW, viewH), Math.max(1, 720 / Math.max(viewW, viewH)));
+        exportCanvas.width = Math.max(2, Math.round(viewW * scale / 2) * 2);
+        exportCanvas.height = Math.max(2, Math.round(viewH * scale / 2) * 2);
         const expCtx = exportCanvas.getContext('2d');
+        const expBounds = getRenderBounds(exportCanvas);
 
         const canvasStream = exportCanvas.captureStream(30);
         activeExportStreams.push(canvasStream);
@@ -3001,7 +3139,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
         const drawFrameByTime = (mediaTime) => {
           expCtx.clearRect(0, 0, exportCanvas.width, exportCanvas.height);
-          expCtx.drawImage(video, 0, 0, exportCanvas.width, exportCanvas.height);
+          expCtx.drawImage(video, expBounds.destX, expBounds.destY, expBounds.destW, expBounds.destH);
 
           const frameIdx = sourceFrameIndex
             ? sourceFrameIndex.frameAt(mediaTime)
