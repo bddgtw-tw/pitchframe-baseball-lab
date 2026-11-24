@@ -145,9 +145,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     #timeDuration { text-align: right; }
     #timelineRow > div { grid-row: 2; grid-column: 1 / -1; min-width: 0; min-height: 44px; }
     #scrubber { width: 100%; height: 44px; background: transparent; margin: 0; }
-    #scrubber::-webkit-slider-runnable-track { height: 6px; border-radius: 8px; background: #334b5b; }
+    /* 進度條底色：亮綠色＝骨架已分析完成的範圍 */
+    #scrubber { --pf-analyzed: 0%; }
+    #scrubber::-webkit-slider-runnable-track { height: 6px; border-radius: 8px;
+      background: linear-gradient(to right, #65a30d var(--pf-analyzed), #334b5b var(--pf-analyzed)); }
     #scrubber::-webkit-slider-thumb { margin-top: -6px; }
-    #scrubber::-moz-range-track { height: 6px; border-radius: 8px; background: #334b5b; }
+    #scrubber::-moz-range-track { height: 6px; border-radius: 8px;
+      background: linear-gradient(to right, #65a30d var(--pf-analyzed), #334b5b var(--pf-analyzed)); }
     #playbackActions { display: grid; grid-template-columns: minmax(0,1fr); gap: 10px; padding: 0; border: 0; }
     #frameControls { display: grid; grid-template-columns: 1fr 1fr 1.4fr 1fr 1fr; gap: 6px; }
     #frameControls button { min-width: 0; padding: 8px 2px; font-size: 12px; justify-content: center; white-space: nowrap; }
@@ -862,6 +866,152 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     let lastValidLandmarks = null;
     let lastValidTime = 0;
 
+    /* ==========================================================================
+       整段預分析：載入後依序逐格辨識，播放／逐格／拖曳只查表繪製
+       - 依序送入模型，MediaPipe 的追蹤與平滑才符合「連續影片」前提
+       - 用獨立的隱藏 <video> 解碼，主畫面在分析期間仍可操作
+       - 結果寫入 poseCache（key 與 getPoseCacheKey 相同：來源影格索引或 30fps 格）
+       ========================================================================== */
+    const analysisVideo = document.createElement('video');
+    analysisVideo.muted = true;
+    analysisVideo.playsInline = true;
+    analysisVideo.preload = 'auto';
+    analysisVideo.setAttribute('playsinline', '');
+    analysisVideo.setAttribute('webkit-playsinline', '');
+    analysisVideo.setAttribute('aria-hidden', 'true');
+    analysisVideo.tabIndex = -1;
+    Object.assign(analysisVideo.style, { position: 'fixed', left: '-4px', top: '0', width: '2px', height: '2px',
+      opacity: '0', pointerEvents: 'none', zIndex: '-1' });
+    document.body.appendChild(analysisVideo);
+    const analysisCanvas = document.createElement('canvas');
+    const analysisCtx = analysisCanvas.getContext('2d');
+    let analysisPoseResolver = null;
+    let trackJob = null; // { source, total, done, running, complete, failed }
+
+    function analysisActive() { return !!(trackJob && trackJob.running && trackJob.source === sourceGeneration); }
+    function trackComplete() { return !!(trackJob && trackJob.complete && trackJob.source === sourceGeneration); }
+
+    function buildFrameTimes() {
+      const frames = [];
+      if (sourceFrameIndex) {
+        const lastIdx = sourceFrameIndex.frameAt(Math.max(0, effectiveDuration - 0.000001));
+        for (let i = 0; i <= lastIdx; i++) frames.push({ index: i, seekTime: sourceFrameIndex.seekTime(i) });
+      } else {
+        const total = Math.max(1, Math.floor(effectiveDuration / fallbackFrameDuration));
+        for (let i = 0; i <= total; i++) frames.push({ index: i, seekTime: Math.min(effectiveDuration, i * fallbackFrameDuration) });
+      }
+      return frames;
+    }
+
+    function waitForMediaEvent(media, eventName, milliseconds, message) {
+      return new Promise((resolve, reject) => {
+        const cleanup = () => {
+          clearTimeout(timer);
+          media.removeEventListener(eventName, onDone);
+          media.removeEventListener('error', onError);
+        };
+        const onDone = () => { cleanup(); resolve(); };
+        const onError = () => { cleanup(); reject(new Error('分析用影片無法解碼')); };
+        const timer = setTimeout(() => { cleanup(); reject(new Error(message)); }, milliseconds);
+        media.addEventListener(eventName, onDone);
+        media.addEventListener('error', onError);
+      });
+    }
+    function seekAnalysisVideo(time) {
+      const done = waitForMediaEvent(analysisVideo, 'seeked', 8000, '影格解碼逾時');
+      analysisVideo.currentTime = time;
+      return done;
+    }
+
+    function setAnalyzedProgress(fraction) {
+      const pct = Math.max(0, Math.min(100, fraction * 100));
+      scrubber.style.setProperty('--pf-analyzed', `${pct.toFixed(2)}%`);
+    }
+    function reportAnalysisProgress(job) {
+      const pct = Math.floor(job.done / job.total * 100);
+      setAnalyzedProgress(job.done / job.total);
+      reportPoseStatus(`骨架分析中 ${pct}%`,
+        `已分析 ${job.done}／${job.total} 格。進度條亮綠色的範圍已可播放、逐格，骨架與畫面同一格。`);
+    }
+
+    function cancelTrackAnalysis() {
+      trackJob = null;
+      analysisPoseResolver = null;
+      setAnalyzedProgress(0);
+    }
+    function resetAnalysisVideo() {
+      cancelTrackAnalysis();
+      analysisVideo.removeAttribute('src');
+      try { analysisVideo.load(); } catch (_) {}
+    }
+
+    async function startTrackAnalysis() {
+      if (!isPoseModelReady || !pose || frameIndexPending || isExportingVideo) return;
+      if (!currentVideoObjectUrl || !(effectiveDuration > 0)) return;
+      if (trackJob && trackJob.source === sourceGeneration) return; // 每支影片只跑一次；失敗後由「重新載入 AI」重來
+      const source = sourceGeneration, engine = pose, epoch = poseEpoch, url = currentVideoObjectUrl;
+      const frames = buildFrameTimes();
+      const job = { source, total: frames.length, done: 0, running: true, complete: false, failed: false };
+      trackJob = job;
+      const stale = () => trackJob !== job || source !== sourceGeneration || epoch !== poseEpoch || engine !== pose;
+      try {
+        // 等目前的即時辨識結束，避免兩個工作共用同一個模型
+        while (isProcessingPose) {
+          await new Promise(resolve => setTimeout(resolve, 16));
+          if (stale()) return;
+        }
+        if (analysisVideo.getAttribute('src') !== url) {
+          const loaded = waitForMediaEvent(analysisVideo, 'loadeddata', 20000, '分析用影片載入逾時');
+          analysisVideo.src = url;
+          analysisVideo.load();
+          await loaded;
+          if (stale()) return;
+        }
+        const scale = Math.min(1, INFERENCE_MAX_EDGE / Math.max(analysisVideo.videoWidth || 1, analysisVideo.videoHeight || 1));
+        analysisCanvas.width = Math.max(1, Math.round((analysisVideo.videoWidth || 1) * scale));
+        analysisCanvas.height = Math.max(1, Math.round((analysisVideo.videoHeight || 1) * scale));
+        // 從乾淨的追蹤狀態開始，之後一格接一格送入
+        await withPoseTimeout(Promise.resolve(engine.reset()), 10000, '模型重設逾時');
+        modelSourceGeneration = source;
+        reportAnalysisProgress(job);
+
+        for (const item of frames) {
+          if (stale()) return;
+          await seekAnalysisVideo(item.seekTime);
+          if (stale()) return;
+          analysisCtx.drawImage(analysisVideo, 0, 0, analysisCanvas.width, analysisCanvas.height);
+          const result = new Promise(resolve => { analysisPoseResolver = resolve; });
+          await withPoseTimeout(engine.send({ image: analysisCanvas }), 30000, '影格辨識超過 30 秒');
+          const results = await withPoseTimeout(result, 5000, 'AI 執行完成但未回傳結果');
+          if (stale()) return;
+          const landmarks = results && results.poseLandmarks && results.poseLandmarks.length >= 25
+            ? results.poseLandmarks.map(p => ({ ...p })) : null;
+          poseCache.set(item.index, landmarks); // 未偵測到人物誠實記為 null
+          if (landmarks) hasEverDetectedRealPerson = true;
+          job.done++;
+          if (job.done % 4 === 0 || job.done === job.total) {
+            reportAnalysisProgress(job);
+            if (!isPlaying) renderStage();
+          }
+        }
+        job.running = false;
+        job.complete = true;
+        setAnalyzedProgress(1);
+        reportPoseStatus('骨架分析完成',
+          `整段 ${job.total} 格已分析。播放、慢動作、逐格與拖曳都直接顯示該格骨架${hasEverDetectedRealPerson ? '' : '；但整段都沒有偵測到人物'}。`);
+        statusDot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+        renderStage();
+      } catch (err) {
+        if (stale()) return;
+        analysisPoseResolver = null;
+        job.running = false;
+        job.failed = true;
+        reportPoseStatus('骨架整段分析中斷',
+          String(err.message || err) + '。已完成的部分仍可使用，其餘影格改為即時辨識；可按「重新載入 AI」重試。', true);
+        triggerPoseInference();
+      }
+    }
+
     // Annotation state
     let activeTool = null; // 'line', 'arrow', 'circle', 'text'
     let activeColor = '#bef264';
@@ -941,6 +1091,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           engine.setOptions({ modelComplexity: isMobileDevice ? 0 : 1, smoothLandmarks: true,
             enableSegmentation: false, minDetectionConfidence: 0.3, minTrackingConfidence: 0.3 });
           engine.onResults(results => {
+            if (analysisPoseResolver) {
+              const resolve = analysisPoseResolver;
+              analysisPoseResolver = null;
+              resolve(results);
+              return;
+            }
             if (exportPoseResolver) {
               const resolve = exportPoseResolver;
               exportPoseResolver = null;
@@ -955,6 +1111,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           isPoseModelReady = true;
           reportPoseStatus('AI 模型已載入', '模型初始化完成；等待可解碼影片影格。');
           triggerPoseInference();
+          startTrackAnalysis();
         } catch (err) {
           if (epoch !== poseEpoch) return;
           isPoseModelReady = false;
@@ -965,7 +1122,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
     retryPoseButton.addEventListener('click', async () => {
       if (poseInitPromise) return;
-      ++poseEpoch; clearPlaybackPair();
+      ++poseEpoch; clearPlaybackPair(); cancelTrackAnalysis();
       isPoseModelReady = false; isProcessingPose = false; activePoseJob = null; lastSentFrame = null;
       const oldPose = pose; pose = null;
       if (oldPose) { try { await withPoseTimeout(oldPose.close(), 2000, 'close timeout'); } catch (_) {} }
@@ -1044,6 +1201,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         renderStage();
         return;
       }
+      // 整段分析進行中：模型由分析工作獨占，尚未分析到的影格先不顯示骨架
+      if (analysisActive()) { renderStage(); return; }
       let frameKey = stamp.source + ':' + stamp.seek + ':' + stamp.time.toFixed(6);
       if (isProcessingPose) { pendingPoseFrame = true; return; }
       if (frameKey === lastSentFrame) return;
@@ -1073,7 +1232,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         if (epoch === poseEpoch && activePoseJob && activePoseJob.source === sourceGeneration) lastSentFrame = frameKey;
       } catch (err) {
         if (epoch !== poseEpoch) return;
-        ++poseEpoch; isPoseModelReady = false; clearPlaybackPair();
+        ++poseEpoch; isPoseModelReady = false; clearPlaybackPair(); cancelTrackAnalysis();
         currentLandmarks = null; renderStage();
         reportPoseStatus('AI 影格辨識失敗', String(err.message || err) + '。影片仍可播放；可按「重新載入 AI」。', true);
       } finally {
@@ -1125,6 +1284,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       }
 
       poseCache.clear();
+      resetAnalysisVideo();
       smoothedCalloutBox = null;
       hasEverDetectedRealPerson = false;
       lastValidLandmarks = null;
@@ -1188,6 +1348,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       
       // 重置狀態
       poseCache.clear();
+      cancelTrackAnalysis();
       smoothedCalloutBox = null;
       hasEverDetectedRealPerson = false;
       lastValidLandmarks = null;
@@ -1220,6 +1381,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
             : `已讀取原始影格｜${Number(index.fps?.toFixed(2)) || '未標稱'} fps`)
             : '此格式沒有可用的影格索引｜±1 約 0.033 秒';
           renderStage();
+          startTrackAnalysis();
         });
         
         // 檢查 30 秒限制
@@ -1335,14 +1497,20 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         && Number.isFinite(p.visibility) && p.visibility>=0.65
         && (p.presence===undefined || (Number.isFinite(p.presence) && p.presence>=0.65));
     }
+    // MediaPipe 座標是 x/寬、y/高 的正規化值；非正方形影片必須先換回像素比例，否則角度會變形
+    // （例如直拍 1080×1920 的真實 90° 會被算成 121°）。
+    function pixelAspect() {
+      return { w: video.videoWidth || 1, h: video.videoHeight || 1 };
+    }
     function calculateAngle(a, b, c) {
       if (![a,b,c].every(credibleBodyPoint)) return null;
-      const abx = a.x - b.x, aby = a.y - b.y;
-      const cbx = c.x - b.x, cby = c.y - b.y;
+      const { w, h } = pixelAspect();
+      const abx = (a.x - b.x) * w, aby = (a.y - b.y) * h;
+      const cbx = (c.x - b.x) * w, cby = (c.y - b.y) * h;
       const dot = abx * cbx + aby * cby;
       const magAB = Math.hypot(abx, aby);
       const magCB = Math.hypot(cbx, cby);
-      if (magAB < 0.001 || magCB < 0.001) return null;
+      if (magAB < 1 || magCB < 1) return null;
       const cosine = Math.max(-1, Math.min(1, dot / (magAB * magCB)));
       return Math.round(Math.acos(cosine) * 180 / Math.PI);
     }
@@ -1350,6 +1518,14 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     /* ==========================================================================
        6. 畫面渲染主迴圈 (Video + 精簡棒球骨架 + 角度標記)
        ========================================================================== */
+    function displayedFrameTime() {
+      if (isPlaying && presentedFrame && presentedFrame.source === sourceGeneration
+        && presentedFrame.seek === seekGeneration && Number.isFinite(presentedFrame.time)) {
+        return presentedFrame.time;
+      }
+      return video.currentTime || 0;
+    }
+
     function renderStage() {
       if (!mainCanvas.width || !mainCanvas.height) return;
       const cw = mainCanvas.width;
@@ -1381,10 +1557,14 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       // 3. 若開啟骨架顯示且有骨架資料，繪製精簡棒球骨架與角度
       // 播放時優先取用該影格快取，或以透明疊加層即時繪製最近一次推論結果，不覆蓋原生 60fps 影片
       let renderLandmarks = null;
-      if (showSkeleton) {
-        const cacheKey = getPoseCacheKey(video.currentTime || 0);
+      if (showSkeleton && !video.seeking) {
+        // 播放中以「實際呈現在畫面上的那一格」查表，骨架與畫面同格，不超前也不落後
+        const cacheKey = getPoseCacheKey(displayedFrameTime());
+        const trackOwnsFrames = analysisActive() || trackComplete();
         if (poseCache.has(cacheKey)) {
           renderLandmarks = poseCache.get(cacheKey);
+        } else if (trackOwnsFrames) {
+          renderLandmarks = null; // 尚未分析到的影格：不拿別格骨架湊數
         } else if (isPlaying && currentLandmarks && currentPoseStamp && currentPoseStamp.source === sourceGeneration && currentPoseStamp.seek === seekGeneration) {
           renderLandmarks = currentLandmarks;
         } else if (poseMatchesFrame() && currentLandmarks) {
@@ -1702,8 +1882,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
       let trunkTiltAngle = null;
       if (midShoulder && pelvisCenter) {
-        const dx = midShoulder.x - pelvisCenter.x;
-        const dy = midShoulder.y - pelvisCenter.y;
+        const { w: aspectW, h: aspectH } = pixelAspect();
+        const dx = (midShoulder.x - pelvisCenter.x) * aspectW;
+        const dy = (midShoulder.y - pelvisCenter.y) * aspectH;
         // 計算與垂直線 (0, -1) 的夾角
         const rad = Math.atan2(dx, -dy);
         trunkTiltAngle = Math.round(rad * 180 / Math.PI);
@@ -1981,7 +2162,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     /* 更新遙測欄與播放格數計數器 */
     function updateTelemetryAndCounters() {
       const visiblePlayPair = pairedPlaybackActive() ? playPair : null;
-      const curTime = timelineSeekTarget !== null ? timelineSeekTarget : (visiblePlayPair ? visiblePlayPair.time : (video.currentTime || 0));
+      const curTime = timelineSeekTarget !== null ? timelineSeekTarget : (visiblePlayPair ? visiblePlayPair.time : displayedFrameTime());
       const curFrame = sourceFrameIndex ? sourceFrameIndex.frameAt(curTime) : -1;
       timeFrameBadge.textContent = `${formatTime(curTime)}${curFrame >= 0 ? `（第 ${curFrame + 1} 格）` : ''}`;
       timeCurrent.textContent = formatTime(curTime);
@@ -1997,7 +2178,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           ? visiblePlayPair.landmarks
           : (poseCache.has(curCacheKey)
             ? poseCache.get(curCacheKey)
-            : ((isPlaying && currentLandmarks && currentPoseStamp && currentPoseStamp.source === sourceGeneration && currentPoseStamp.seek === seekGeneration)
+            : ((analysisActive() || trackComplete()) ? null
+            : (isPlaying && currentLandmarks && currentPoseStamp && currentPoseStamp.source === sourceGeneration && currentPoseStamp.seek === seekGeneration)
               ? currentLandmarks
               : (poseMatchesFrame() ? currentLandmarks : null))));
       if (!telemetryLandmarks || telemetryLandmarks.length < 25) {
@@ -2024,8 +2206,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if ([lm[11],lm[12],lm[23],lm[24]].every(credibleBodyPoint)) {
         const midShoulder = { x: (lm[11].x + lm[12].x) / 2, y: (lm[11].y + lm[12].y) / 2 };
         const pelvisCenter = { x: (lm[23].x + lm[24].x) / 2, y: (lm[23].y + lm[24].y) / 2 };
-        const dx = midShoulder.x - pelvisCenter.x;
-        const dy = midShoulder.y - pelvisCenter.y;
+        const { w: aspectW, h: aspectH } = pixelAspect();
+        const dx = (midShoulder.x - pelvisCenter.x) * aspectW;
+        const dy = (midShoulder.y - pelvisCenter.y) * aspectH;
         const rad = Math.atan2(dx, -dy);
         const deg = Math.round(rad * 180 / Math.PI);
         telTrunkTilt.textContent = `${Math.abs(deg)}°`;
@@ -2512,6 +2695,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (keepPaused) {
         pauseVideo(false, false);
       }
+      // 匯出期間暫停的整段分析在此補上
+      setTimeout(startTrackAnalysis, 0);
     }
 
     function seekVideoForExport(targetTime, signal) {
@@ -2567,6 +2752,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         return;
       }
       if (isExportingVideo) return;
+      if (analysisActive()) { alert('骨架正在整段分析中，完成後即可匯出（不需重新分析）。'); return; }
 
       // 1. 偵測瀏覽器真實支援格式（絕不將 WebM 假裝為 MP4）
       let mimeType = 'video/webm';
@@ -2599,7 +2785,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
       try {
         // 階段 1：離線逐格預分析並以來源影格索引快取骨架（未偵測到人物則誠實記為 null，絕不虛構）
-        if (showSkeleton && isPoseModelReady && pose) {
+        if (showSkeleton && trackComplete()) {
+          // 載入時已完成整段分析：直接沿用，不重算
+          for (const item of buildFrameTimes()) {
+            exportPoseCache.set(item.index, { analyzed: true, landmarks: poseCache.has(item.index) ? poseCache.get(item.index) : null });
+          }
+        } else if (showSkeleton && isPoseModelReady && pose) {
           video.muted = true;
           if (modelSourceGeneration !== sourceGeneration) {
             await withPoseTimeout(Promise.resolve(pose.reset()), 10000, '模型重設逾時');
