@@ -402,10 +402,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         
         <!-- Step & Play Controls -->
         <div id="frameControls" class="flex items-center gap-1 sm:gap-1.5">
-          <button id="btnPrev5" title="倒退 5 格" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg font-mono border border-slate-700 transition">
+          <button id="btnPrev5" title="倒退 5 格（按住連續倒退）" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg font-mono border border-slate-700 transition">
             −5格
           </button>
-          <button id="btnPrev1" title="倒退 1 格 (鍵盤左鍵)" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg font-semibold border border-slate-700 transition">
+          <button id="btnPrev1" title="倒退 1 格（按住連續倒退；鍵盤左鍵）" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg font-semibold border border-slate-700 transition">
             −1格
           </button>
 
@@ -413,10 +413,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
             <span id="playIcon">▶ 播放</span>
           </button>
 
-          <button id="btnNext1" title="前進 1 格 (鍵盤右鍵)" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg font-semibold border border-slate-700 transition">
+          <button id="btnNext1" title="前進 1 格（按住連續前進；鍵盤右鍵）" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg font-semibold border border-slate-700 transition">
             +1格
           </button>
-          <button id="btnNext5" title="前進 5 格" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg font-mono border border-slate-700 transition">
+          <button id="btnNext5" title="前進 5 格（按住連續前進）" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg font-mono border border-slate-700 transition">
             +5格
           </button>
 
@@ -3449,11 +3449,42 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       else playVideo();
     });
 
-    // 逐格控制
-    btnPrev1.addEventListener('click', () => stepFrame(-1));
-    btnNext1.addEventListener('click', () => stepFrame(1));
-    btnPrev5.addEventListener('click', () => stepFrame(-5));
-    btnNext5.addEventListener('click', () => stepFrame(5));
+    // 逐格控制：點一下跳一次；按住不放會連續跳（先停 0.38 秒，之後每格解碼完成才跳下一次，不會亂跳過畫面）
+    const HOLD_STEP_DELAY = 380, HOLD_STEP_INTERVAL = 90;
+    function bindHoldStep(btn, delta) {
+      let delayTimer = null, repeatTimer = null;
+      const stop = () => {
+        if (delayTimer !== null) clearTimeout(delayTimer);
+        if (repeatTimer !== null) clearInterval(repeatTimer);
+        delayTimer = null; repeatTimer = null;
+        btn.classList.remove('ring-2', 'ring-lime-400');
+      };
+      btn.addEventListener('pointerdown', (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        e.preventDefault();
+        try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+        stop();
+        stepFrame(delta);
+        delayTimer = setTimeout(() => {
+          delayTimer = null;
+          btn.classList.add('ring-2', 'ring-lime-400');
+          repeatTimer = setInterval(() => {
+            if (!video.seeking && timelineSeekTarget === null) stepFrame(delta);
+          }, HOLD_STEP_INTERVAL);
+        }, HOLD_STEP_DELAY);
+      });
+      ['pointerup', 'pointercancel', 'lostpointercapture'].forEach(t => btn.addEventListener(t, stop));
+      // 鍵盤（Enter／空白鍵）觸發的 click 沒有 pointerdown，照舊跳一次
+      btn.addEventListener('click', (e) => { if (e.detail === 0) stepFrame(delta); });
+      // 手機長按不跳出選單、不選取文字
+      btn.addEventListener('contextmenu', (e) => e.preventDefault());
+      Object.assign(btn.style, { touchAction: 'none', userSelect: 'none', webkitUserSelect: 'none', webkitTouchCallout: 'none' });
+    }
+    bindHoldStep(btnPrev5, -5);
+    bindHoldStep(btnPrev1, -1);
+    bindHoldStep(btnNext1, 1);
+    bindHoldStep(btnNext5, 5);
+    window.addEventListener('blur', () => [btnPrev5, btnPrev1, btnNext1, btnNext5].forEach(b => b.dispatchEvent(new Event('pointercancel'))));
 
     // 循環開關
     btnLoop.addEventListener('click', () => {
