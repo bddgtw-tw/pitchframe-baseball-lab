@@ -1,5 +1,7 @@
 # PitchFrame ⚾
 
+[![Verify PitchFrame](https://github.com/bddgtw-tw/pitchframe-baseball-lab/actions/workflows/verify.yml/badge.svg)](https://github.com/bddgtw-tw/pitchframe-baseball-lab/actions/workflows/verify.yml)
+
 > 把一段投球影片，變成家長、球員與教練可以一起討論的逐格證據。
 
 [立即使用 PitchFrame](https://bddgtw-tw.github.io/pitchframe-baseball-lab/) ・ [回報問題](https://github.com/bddgtw-tw/pitchframe-baseball-lab/issues)
@@ -89,6 +91,10 @@ python -m http.server 8080
 ```
 
 然後開啟 `http://localhost:8080/`。提交變更前至少確認：
+
+```bash
+node scripts/verify.mjs
+```
 
 - 首次載入與離線重開可用。
 - iPhone／Android 直式與橫式版面可操作。
