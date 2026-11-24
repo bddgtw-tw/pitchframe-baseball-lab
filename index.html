@@ -375,7 +375,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           <h2 id="analysisContextTitle" class="text-sm font-bold text-slate-100">這次投球的分析背景</h2>
           <p class="mt-1 text-[11px] text-slate-400">只存在這台裝置，不填姓名或球隊。慣用手會協助判斷出手手腕；其他欄位會寫入 AI 分析包，避免 AI 亂猜。</p>
         </div>
-        <span id="contextSaved" class="hidden shrink-0 text-[11px] font-bold text-lime-300">已儲存</span>
+        <div class="flex shrink-0 flex-col items-end gap-1">
+          <span id="contextReadiness" class="rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-[11px] font-bold text-amber-200">背景待補</span>
+          <span id="contextSaved" class="hidden text-[11px] font-bold text-lime-300">已儲存</span>
+        </div>
       </div>
       <div id="contextFields">
         <label>匿名球員
@@ -921,6 +924,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       condition: document.getElementById('ctxCondition')
     };
     const contextSaved = document.getElementById('contextSaved');
+    const contextReadiness = document.getElementById('contextReadiness');
     const conditionWarning = document.getElementById('conditionWarning');
     const qualityControls = {
       fullBodyVisible: document.getElementById('qualityFullBody'),
@@ -952,6 +956,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const saved = JSON.parse(localStorage.getItem('pf-analysis-context') || 'null');
       if (saved && typeof saved === 'object') analysisContext = { ...analysisContext, ...saved };
     } catch (_) {}
+    const contextFieldLabels = { handedness: '投球手', ageGroup: '年齡層', cameraView: '拍攝視角', surface: '投球環境', condition: '身體狀況' };
+    function missingAnalysisContext(context = analysisContext) {
+      return Object.keys(contextFieldLabels).filter(key => !context[key] || context[key] === 'unknown');
+    }
     function syncAnalysisContext() {
       for (const [key, control] of Object.entries(contextControls)) {
         if ([...control.options].some(option => option.value === analysisContext[key])) control.value = analysisContext[key];
@@ -962,6 +970,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       conditionWarning.textContent = stop
         ? '目前標記為有疼痛：請停止投球。PitchFrame 不應用來判斷能否繼續，請告知家長／教練並尋求合格醫療專業評估。'
         : caution ? '目前標記為明顯疲勞：先停止高強度投球並休息。疲勞狀態下的動作不宜直接當成技術問題下結論。' : '';
+      const missing = missingAnalysisContext();
+      contextReadiness.textContent = missing.length ? `待補 ${missing.length} 項` : '分析背景完整';
+      contextReadiness.title = missing.length ? `尚未設定：${missing.map(key => contextFieldLabels[key]).join('、')}` : '投球手、年齡層、視角、環境與身體狀況皆已設定';
+      contextReadiness.className = missing.length
+        ? 'rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-[11px] font-bold text-amber-200'
+        : 'rounded-full border border-lime-500/50 bg-lime-500/10 px-2 py-1 text-[11px] font-bold text-lime-200';
     }
     for (const [key, control] of Object.entries(contextControls)) {
       control.addEventListener('change', () => {
@@ -3620,12 +3634,20 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const sep = getSeparation();
       const currentComparison = currentSessionSnapshot(sep);
       const baseline = progressHistory.length ? progressHistory.find(item => (item.context.athleteSlot || 'A') === analysisContext.athleteSlot) || null : null;
-      const contextComparable = !!(baseline && currentComparison
+      const missingContext = missingAnalysisContext();
+      const contextComplete = missingContext.length === 0;
+      const contextComparable = !!(baseline && currentComparison && contextComplete
         && (baseline.context.athleteSlot || 'A') === analysisContext.athleteSlot
+        && analysisContext.handedness !== 'unknown'
         && baseline.context.handedness === analysisContext.handedness
+        && analysisContext.ageGroup !== 'unknown'
+        && baseline.context.ageGroup === analysisContext.ageGroup
         && baseline.context.cameraView !== 'unknown'
         && baseline.context.cameraView === analysisContext.cameraView
-        && baseline.context.surface === analysisContext.surface);
+        && analysisContext.surface !== 'unknown'
+        && baseline.context.surface === analysisContext.surface
+        && analysisContext.condition === 'normal'
+        && baseline.context.condition === 'normal');
       const qualityCoreReady = captureQuality.fullBodyVisible && captureQuality.cameraStable && captureQuality.singleUneditedPitch;
       const baselineQualityReady = !!(baseline?.captureQuality?.fullBodyVisible && baseline?.captureQuality?.cameraStable && baseline?.captureQuality?.singleUneditedPitch && baseline?.captureQuality?.comparableSetup);
       const sameContext = contextComparable && qualityCoreReady && captureQuality.comparableSetup && baselineQualityReady;
@@ -3661,6 +3683,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           condition: analysisContext.condition,
           privacyNote: '未收集姓名、球隊或其他身分資料'
         },
+        analysisReadiness: {
+          contextComplete,
+          missingFields: missingContext,
+          normalConditionForComparison: analysisContext.condition === 'normal'
+        },
         captureQuality: {
           ...captureQuality,
           coreReady: qualityCoreReady,
@@ -3694,7 +3721,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           current: currentComparison,
           baseline,
           footStrikeToReleaseDeltaMilliseconds: phaseDelta,
-          validOnlyWhen: 'anonymousAthleteSlot, throwingHand, cameraView, throwingSurface, frame rate, and recording setup are comparable; otherwise describe differences without claiming improvement',
+          validOnlyWhen: 'anonymousAthleteSlot, throwingHand, ageGroup, cameraView, throwingSurface, normal condition, frame rate, and recording setup are comparable; unknown values never count as a match',
           sameContext
         },
         limitations: [
