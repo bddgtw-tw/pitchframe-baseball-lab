@@ -1792,6 +1792,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         scrubFlight = null;
       }
       renderStage();
+      if (trackComplete()) renderAnalysisCoverage();
     }
 
     function handleMissedPoseFrame(curTime, frameKey) {
@@ -2487,20 +2488,26 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     });
     document.getElementById('btnJumpFoot').addEventListener('click', () => { const s = getSeparation(); if (s) jumpToKey(s.foot); });
     document.getElementById('btnJumpRelease').addEventListener('click', () => { const s = getSeparation(); if (s) jumpToKey(s.release); });
+    function currentManualEventKey() {
+      // Prefer the exact decoded frame that produced the visible skeleton. video.currentTime can
+      // differ slightly from requestVideoFrameCallback mediaTime and otherwise point at a cache miss.
+      const stamp = poseMatchesFrame() ? currentPoseStamp : frameStamp();
+      return getPoseCacheKey(stamp && Number.isFinite(stamp.time) ? stamp.time : displayedFrameTime());
+    }
     document.getElementById('btnMarkFoot').addEventListener('click', () => {
       if (!video.videoWidth) return;
       if (isPlaying) pauseVideo(false, false);
-      manualFoot = getPoseCacheKey(video.currentTime || 0);
-      sepCache = null; renderStage();
+      manualFoot = currentManualEventKey();
+      sepCache = null; renderStage(); renderAnalysisCoverage();
     });
     document.getElementById('btnMarkRelease').addEventListener('click', () => {
       if (!video.videoWidth) return;
       if (isPlaying) pauseVideo(false, false);
-      manualRelease = getPoseCacheKey(video.currentTime || 0);
-      sepCache = null; renderStage();
+      manualRelease = currentManualEventKey();
+      sepCache = null; renderStage(); renderAnalysisCoverage();
     });
     document.getElementById('btnResetEvents').addEventListener('click', () => {
-      manualFoot = null; manualRelease = null; sepCache = null; renderStage();
+      manualFoot = null; manualRelease = null; sepCache = null; renderStage(); renderAnalysisCoverage();
     });
     sepStrip.addEventListener('click', (e) => {
       const rect = sepStrip.getBoundingClientRect();

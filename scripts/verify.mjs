@@ -46,6 +46,9 @@ for (const performanceBehavior of ['href="./pitchframe.css"', '選擇影片後�
 for (const samplingBehavior of ['const ANALYSIS_SAMPLE_FPS = 8', 'sampledKeys: frames.map(frame => frame.index)', '個取樣點', 'fps: ANALYSIS_SAMPLE_FPS']) {
   if (!html.includes(samplingBehavior)) fail(`Bounded whole-video sampling is missing: ${samplingBehavior}`);
 }
+for (const eventSyncBehavior of ['function currentManualEventKey()', 'poseMatchesFrame() ? currentPoseStamp : frameStamp()', 'manualRelease = currentManualEventKey()', 'sepCache = null; renderStage(); renderAnalysisCoverage()']) {
+  if (!html.includes(eventSyncBehavior)) fail(`Manual event/frame synchronization is missing: ${eventSyncBehavior}`);
+}
 for (const blockingBehavior of ['src="./tailwind.js"', "addEventListener('DOMContentLoaded', initMediaPipe)", 'user-scalable=no']) {
   if (html.includes(blockingBehavior)) fail(`Blocking or inaccessible startup behavior remains: ${blockingBehavior}`);
 }
