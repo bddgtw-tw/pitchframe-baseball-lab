@@ -156,8 +156,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     html { min-height: 100%; scroll-padding-top: 76px; }
     body { height: auto; min-height: 100svh; background: #0b131c; }
     body > header { min-height: 64px; padding: 10px clamp(12px, 2vw, 28px); background: #101b27; }
-    main { display: block !important; flex: none !important; width: 100%; max-width: 1440px !important;
-      padding: 16px clamp(12px, 2vw, 28px) 28px !important; overflow: visible !important; }
+    main { display: block !important; flex: none !important; width: 100%; max-width: 1200px !important;
+      padding: 16px clamp(20px, 2vw, 28px) 28px !important; overflow: visible !important; }
     #stageStatusBar { margin-bottom: 10px; min-height: 26px; }
     #statusBadge { background: transparent; border: 0; box-shadow: none; padding-left: 0; }
     #operationWorkspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; align-items: start; }
@@ -174,11 +174,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     #timeDuration { text-align: right; }
     #timelineRow > div { grid-row: 2; grid-column: 1 / -1; min-width: 0; min-height: 44px; }
     #scrubber { width: 100%; height: 44px; background: transparent; margin: 0; }
-    /* 進度條底色：亮綠色＝骨架已分析完成的範圍 */
+    /* 分析進度由影片上的文字狀態呈現，時間軸保持單一底色。 */
     #scrubber { --pf-analyzed: 0%; }
     #scrubber { --pf-a0: 0%; }
-    #scrubber::-webkit-slider-runnable-track { height: 6px; border-radius: 8px;
-      background: linear-gradient(to right, #334b5b var(--pf-a0), #65a30d var(--pf-a0), #65a30d var(--pf-analyzed), #334b5b var(--pf-analyzed)); }
+    #scrubber::-webkit-slider-runnable-track { height: 6px; border-radius: 8px; background: #334b5b; }
     /* 選擇球員提示：只蓋住影片，控制列仍可操作 */
     #pickOverlay { position: absolute; inset: 0; z-index: 35; cursor: crosshair; touch-action: manipulation; }
     #pickOverlay.hidden { display: none !important; }
@@ -194,8 +193,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     #analysisPill.hidden { display: none; }
     #btnRepick:not(.hidden) { display: flex; }
     #scrubber::-webkit-slider-thumb { margin-top: -6px; }
-    #scrubber::-moz-range-track { height: 6px; border-radius: 8px;
-      background: linear-gradient(to right, #334b5b var(--pf-a0), #65a30d var(--pf-a0), #65a30d var(--pf-analyzed), #334b5b var(--pf-analyzed)); }
+    #scrubber::-moz-range-track { height: 6px; border-radius: 8px; background: #334b5b; }
     #playbackActions { display: grid; grid-template-columns: minmax(0,1fr); gap: 10px; padding: 0; border: 0; }
     #frameControls { display: grid; grid-template-columns: 1fr 1fr 1.4fr 1fr 1fr; gap: 6px; }
     #frameControls button { min-width: 0; padding: 8px 2px; font-size: 12px; justify-content: center; white-space: nowrap; }
@@ -221,6 +219,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     #resultsHeading { font-size: 15px; font-weight: 700; }
     #timeFrameBadge { color: var(--pf-muted); font: 12px ui-monospace, monospace; }
     #telemetryGrid { gap: 0; grid-template-columns: 1fr; }
+    #telemetryGrid[hidden] { display: none !important; }
     #telemetryGrid > div { padding: 10px 0; border: 0; border-bottom: 1px solid #203342; border-radius: 0;
       background: transparent; display: flex; flex-direction: row; align-items: center; gap: 12px; grid-column: auto; }
     #telemetryGrid > div > div { margin: 0; gap: 16px; }
@@ -254,16 +253,16 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       #telemetryGrid > div { flex-direction: column; align-items: stretch; gap: 10px; }
     }
     @media (min-width: 1024px), (orientation: landscape) and (min-width: 600px) {
-      #operationWorkspace { grid-template-columns: minmax(0,1fr) 340px; gap: 18px; }
-      #controlPanel { border-radius: 12px; }
-      #stageContainer { height: clamp(280px, 65svh, 760px) !important; max-height: none !important; }
+      #operationWorkspace { grid-template-columns: minmax(0,1fr); gap: 0; }
+      #controlPanel { border-radius: 0 0 12px 12px; }
+      #stageContainer { height: clamp(280px, 58svh, 680px) !important; max-height: none !important; }
     }
     @media (orientation: landscape) and (max-width: 1023px) {
       body > header { min-height: 52px; padding-top: 4px; padding-bottom: 4px; }
       main { padding-top: 8px !important; }
       #stageStatusBar { margin-bottom: 6px; min-height: 20px; }
-      #operationWorkspace { grid-template-columns: minmax(0,1fr) 304px; gap: 12px; }
-      #stageContainer { height: max(240px, calc(100svh - 102px)) !important; }
+      #operationWorkspace { grid-template-columns: minmax(0,1fr); gap: 0; }
+      #stageContainer { height: max(240px, calc(100svh - 170px)) !important; }
       #controlPanel { padding: 12px; }
       #playbackDeck { gap: 4px; }
       #playbackActions { gap: 6px; }
@@ -271,9 +270,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       #annotationSection summary { padding-top: 10px; }
     }
     @media (max-width: 639px) {
-      body > header { flex-wrap: wrap; gap: 8px; }
-      body > header > div:last-child { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 6px; }
-      body > header > div:last-child button { justify-content: center; padding-left: 8px; padding-right: 8px; white-space: nowrap; }
+      body > header { flex-wrap: nowrap; gap: 8px; }
+      #headerActions { width: auto; margin-left: auto; flex: 0 0 auto; }
+      #headerActions button { justify-content: center; padding-left: 8px; padding-right: 8px; white-space: nowrap; }
+      .header-link { min-height: 36px; padding: 0 9px; }
     }
     @media (max-width: 359px) {
       #controlPanel { padding: 10px; }
@@ -291,9 +291,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
   <!-- Header: Function-only header -->
   <header class="bg-slate-900/90 border-b border-slate-800 px-3 py-2.5 sm:px-6 flex items-center justify-between z-30 sticky top-0 backdrop-blur">
     <div class="flex items-center gap-2.5">
-      <div class="w-8 h-8 rounded-lg bg-lime-400 text-slate-950 font-black flex items-center justify-center text-base shadow-sm">
-        ⚾
-      </div>
+      <div class="w-8 h-8 rounded-lg bg-lime-400 text-slate-950 font-black flex items-center justify-center text-sm">PF</div>
       <div>
         <h1 class="text-sm sm:text-base font-bold text-white tracking-tight flex items-center gap-1.5">
           投球逐格｜PitchFrame
@@ -306,30 +304,18 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     </div>
 
     <!-- Input Actions -->
-    <div class="flex items-center gap-2">
+    <div id="headerActions" class="flex items-center gap-2">
       <!-- Hidden file inputs -->
       <input type="file" id="cameraInput" accept="video/*" capture="environment" class="hidden">
       <input type="file" id="fileInput" accept="video/*" class="hidden">
 
-      <button id="btnCapture" class="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-100 text-xs font-semibold px-3 py-2 rounded-lg border border-slate-700 transition">
-        <span>📷</span>
-        <span>拍攝影片</span>
-      </button>
+      <button id="btnCapture" hidden>拍攝影片</button>
 
-      <button id="btnChoose" class="flex items-center gap-1.5 bg-lime-400 hover:bg-lime-300 active:scale-95 text-slate-950 text-xs font-bold px-3 py-2 rounded-lg shadow transition">
-        <span>📁</span>
-        <span>選擇影片</span>
-      </button>
+      <button id="btnChoose" hidden>選擇影片</button>
 
-      <button id="btnInstallApp" type="button" class="hidden items-center gap-1.5 bg-sky-500/20 hover:bg-sky-500/30 text-sky-100 text-xs font-bold px-3 py-2 rounded-lg border border-sky-400/40">
-        <span>⬇</span>
-        <span>安裝 App</span>
-      </button>
-
-      <a class="header-link" href="https://github.com/bddgtw-tw/pitchframe-baseball-lab" target="_blank" rel="noopener" aria-label="到 GitHub 查看 PitchFrame 專案">GitHub ★</a>
+      <a class="header-link" href="https://github.com/bddgtw-tw/pitchframe-baseball-lab" target="_blank" rel="noopener" aria-label="到 GitHub 查看 PitchFrame 專案">GitHub</a>
 
       <button id="btnClearVideo" class="hidden flex items-center gap-1 bg-rose-500/20 hover:bg-rose-500/30 active:scale-95 text-rose-200 text-xs font-semibold px-2.5 py-2 rounded-lg border border-rose-500/40 transition" title="清除目前載入的影片">
-        <span>✕</span>
         <span>清除影片</span>
       </button>
 
@@ -339,10 +325,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
   <!-- 30-Second Warning Toast / Banner -->
   <div id="durationWarning" class="hidden bg-amber-500/20 border-b border-amber-500/40 px-4 py-2 text-xs text-amber-200 flex items-center justify-between">
     <div class="flex items-center gap-2">
-      <span class="text-base">⚠️</span>
       <span id="durationWarningText">影片長度超過 30 秒上限。為確保順暢度，系統已自動為您截取前 30 秒進行分析。</span>
     </div>
-    <button id="btnCloseWarning" class="text-amber-400 hover:text-white font-bold px-2 py-0.5">✕</button>
+    <button id="btnCloseWarning" class="text-amber-200 hover:text-white font-bold px-2 py-0.5">關閉</button>
   </div>
 
   <!-- Fallback / Estimated Pose Banner -->
@@ -357,18 +342,18 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       <div class="flex items-start justify-between gap-3">
         <div>
           <h2 id="parentGuideTitle">用一支手機，和孩子一起看懂這次投球</h2>
-          <p class="mt-1 text-xs text-slate-400">免費使用・免登入・影片只在你的裝置處理</p>
+          <p class="mt-1 text-xs text-slate-300">側後方固定手機拍一球，確認落地與出手，再把證據分享給教練。</p>
         </div>
-        <button id="btnShareApp" type="button" class="shrink-0 bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-bold px-3 py-2 rounded-lg border border-slate-600">分享給家長</button>
+        <div class="flex shrink-0 gap-2">
+          <button id="btnInstallApp" type="button" class="hidden items-center text-slate-300 text-xs px-3 py-2">安裝</button>
+          <button id="btnShareApp" type="button" class="bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-bold px-3 py-2 rounded-lg border border-slate-600">分享工具</button>
+        </div>
       </div>
-      <ol>
-        <li><span class="guide-number">1</span><span><b>從側後方拍 5–10 秒</b><br>全身、雙腳與出手都留在畫面內；固定手機，光線要夠。</span></li>
-        <li><span class="guide-number">2</span><span><b>選影片，逐格找到關鍵時刻</b><br>先看前腳落地，再看出手。骨架不準的格就跳過，不硬猜。</span></li>
-        <li><span class="guide-number">3</span><span><b>匯出畫面或 AI 分析包</b><br>帶著具體影格和數據問教練，比只說「姿勢怪怪的」更容易討論。</span></li>
-      </ol>
-      <p class="science-note"><b class="text-slate-200">先說清楚：</b>PitchFrame 是觀察與溝通工具，不是醫療、傷害預測或實驗室 3D 動作分析。單機位 AI 深度與自動事件點都是估計值；少棒球員應優先觀察疲勞、疼痛與投球量，技術調整請由合格教練依年齡與個別狀況判斷。</p>
     </section>
 
+    <details id="sessionSetup" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2">
+      <summary class="cursor-pointer text-sm font-bold text-slate-100">分析設定 <span id="sessionSetupStatus" class="ml-2 text-xs font-normal text-amber-200">尚未完成</span></summary>
+      <div class="mt-3 grid gap-3">
     <section id="analysisContext" aria-labelledby="analysisContextTitle">
       <div class="flex items-start justify-between gap-3">
         <div>
@@ -449,6 +434,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       </div>
       <p id="captureQualityAdvice" class="mt-2 text-[11px] leading-relaxed text-amber-200">尚未確認拍攝條件；可以分析，但請勿據此宣稱進步或退步。</p>
     </section>
+      <p class="text-xs leading-relaxed text-slate-400">PitchFrame 是觀察與溝通工具，不是醫療診斷或實驗室 3D 動作分析。疼痛或明顯疲勞時應停止投球並尋求專業評估。</p>
+      </div>
+    </details>
 
     <div id="stageStatusBar" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;flex-shrink:0">
       <!-- Status bar outside the original video frame: AI Status & Current Frame -->
@@ -487,9 +475,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
       <!-- Initial Empty State -->
       <div id="emptyPrompt" class="absolute inset-0 z-30 flex flex-col items-center justify-center p-6 text-center bg-slate-950/80 cursor-pointer">
-        <div class="w-16 h-16 rounded-full bg-slate-900 border border-slate-700 flex items-center justify-center text-3xl mb-3 text-lime-400 shadow-inner">
-          ⚡
-        </div>
         <h2 class="text-base sm:text-lg font-bold text-white mb-1">匯入打擊或投球影片</h2>
         <p class="text-xs text-slate-400 max-w-sm mb-4">
           支援手機直式與橫式錄影。影片僅在手機/本機分析，不上傳雲端。
@@ -519,7 +504,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       <div id="textInputModal" class="hidden absolute z-40 bg-slate-900 border border-slate-700 p-2.5 rounded-xl shadow-2xl flex items-center gap-2">
         <input type="text" id="textInputContent" placeholder="輸入備註（如：手肘過低）" maxlength="20" class="bg-slate-950 border border-slate-700 text-white text-xs px-2.5 py-1.5 rounded-lg focus:outline-none focus:border-lime-400 w-44">
         <button id="btnConfirmText" class="bg-lime-400 text-slate-950 text-xs font-bold px-2.5 py-1.5 rounded-lg">完成</button>
-        <button id="btnCancelText" class="text-slate-400 hover:text-white text-xs px-1.5 py-1.5">✕</button>
+        <button id="btnCancelText" class="text-slate-400 hover:text-white text-xs px-1.5 py-1.5">取消</button>
       </div>
     </div>
 
@@ -549,7 +534,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         
         <!-- Step & Play Controls -->
         <div id="frameControls" class="flex items-center gap-1 sm:gap-1.5">
-          <button id="btnPrev5" title="倒退 5 格（按住連續倒退）" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg font-mono border border-slate-700 transition">
+          <button id="btnPrev5" hidden title="倒退 5 格（按住連續倒退）">
             −5格
           </button>
           <button id="btnPrev1" title="倒退 1 格（按住連續倒退；鍵盤左鍵）" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg font-semibold border border-slate-700 transition">
@@ -563,7 +548,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           <button id="btnNext1" title="前進 1 格（按住連續前進；鍵盤右鍵）" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg font-semibold border border-slate-700 transition">
             +1格
           </button>
-          <button id="btnNext5" title="前進 5 格（按住連續前進）" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg font-mono border border-slate-700 transition">
+          <button id="btnNext5" hidden title="前進 5 格（按住連續前進）">
             +5格
           </button>
 
@@ -573,17 +558,18 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
         <!-- Speed Selector Pills -->
         <div id="speedControls" aria-label="播放速度" class="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
-          <button class="speed-btn px-2 py-1 rounded-lg text-slate-400 hover:text-white transition" data-speed="0.1">0.1×</button>
+          <button class="speed-btn" hidden data-speed="0.1">0.1×</button>
           <button class="speed-btn px-2 py-1 rounded-lg text-slate-400 hover:text-white transition" data-speed="0.25">0.25×</button>
           <button class="speed-btn px-2 py-1 rounded-lg text-slate-400 hover:text-white transition" data-speed="0.5">0.5×</button>
-          <button class="speed-btn px-2 py-1 rounded-lg text-slate-400 hover:text-white transition" data-speed="0.75">0.75×</button>
+          <button class="speed-btn" hidden data-speed="0.75">0.75×</button>
           <button class="speed-btn px-2 py-1 rounded-lg bg-lime-400 text-slate-950 font-bold transition" data-speed="1.0">1.0×</button>
         </div>
 
         <!-- View Toggles: Skeleton & Player Focus -->
-        <div id="viewControls" class="flex items-center gap-1.5">
+        <details id="viewSettings" class="w-full text-xs text-slate-300">
+          <summary class="cursor-pointer py-2 text-slate-300">顯示設定</summary>
+        <div id="viewControls" class="flex flex-wrap items-center gap-1.5 pt-1">
           <button id="btnLoop" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-400 text-xs px-2.5 py-2 rounded-lg border border-slate-700 transition font-medium flex items-center gap-1" title="循環播放開關">
-            <span>🔁</span>
             <span id="loopStatusText">循環: 開</span>
           </button>
           <button id="btnSmooth" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-400 text-xs px-2.5 py-2 rounded-lg border border-slate-700 transition font-medium flex items-center gap-1" title="慢動作補間：0.5× 以下播放時，前後兩個真實影格之間淡入淡出，畫面較順；骨架與角度只畫在當下為主的那一格真實影格上">
@@ -595,18 +581,16 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
             <span id="separationStatusText">髖肩分離: 開</span>
           </button>
           <button id="btnToggleSkeleton" class="bg-lime-400/20 text-lime-300 border border-lime-400/30 text-xs font-semibold px-3 py-2 rounded-lg transition active:scale-95 flex items-center gap-1">
-            <span>🦴</span>
             <span id="skeletonToggleText">隱藏骨架</span>
           </button>
           <button id="btnToggleAngles" class="bg-lime-400/20 text-lime-300 border border-lime-400/30 text-xs font-semibold px-3 py-2 rounded-lg transition active:scale-95 flex items-center gap-1">
-            <span>📐</span>
             <span id="anglesToggleText">隱藏角度</span>
           </button>
+        </div>
+        </details>
           <button id="btnRepick" type="button" class="hidden bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg border border-slate-700 transition font-medium items-center justify-center gap-1" style="grid-column:1 / -1">
-            <span>🎯</span>
             <span>重新選擇球員</span>
           </button>
-        </div>
       </div>
     </div>
 
@@ -643,7 +627,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           直線 ╱
         </button>
         <button class="tool-btn bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 transition" data-tool="arrow">
-          箭頭 ➜
+          箭頭
         </button>
         <button class="tool-btn bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 transition" data-tool="circle">
           圈選 ◯
@@ -671,7 +655,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           ↪ 重做
         </button>
         <button id="btnClearAnnotations" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 transition" title="清除所有標註">
-          🗑 清除
+          清除
         </button>
       </div>
     </div>
@@ -686,12 +670,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     <section id="resultsSection" aria-labelledby="resultsHeading">
       <div id="resultsHeader">
-        <h2 id="resultsHeading">數值與匯出</h2>
+        <h2 id="resultsHeading">分析結果</h2>
         <span id="timeFrameBadge">00:00.0 (0格)</span>
       </div>
-    <p id="headAnchorNotice" style="margin:0 0 12px;color:#a8bbc8;font-size:12px;line-height:1.6">頭部小點是雙耳中點的位置示意，不代表精確顱骨中心或頭部前傾角；雙耳可信度不足時不顯示。</p>
+    <p id="headAnchorNotice" hidden>頭部小點是雙耳中點的位置示意，不代表精確顱骨中心或頭部前傾角；雙耳可信度不足時不顯示。</p>
     <!-- Telemetry Bar: Real-time Angles & Biomechanics (Clean, Read-only Badges) -->
-    <div id="telemetryGrid" class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
+    <div id="telemetryGrid" hidden>
       <!-- Trunk Tilt -->
       <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between">
         <div class="text-[11px] text-slate-400 flex items-center justify-between">
@@ -744,10 +728,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       <div class="col-span-2 sm:col-span-1 bg-slate-900/90 border border-slate-800 rounded-xl p-2 sm:p-2.5 flex flex-col justify-between">
         <div class="text-[11px] text-slate-400 flex items-center justify-between">
           <span>右膝角度</span>
-          <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+          <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
         </div>
         <div class="flex items-baseline justify-between mt-1">
-          <span id="telRightKnee" class="text-base sm:text-lg font-bold font-mono text-purple-400">--°</span>
+          <span id="telRightKnee" class="text-base sm:text-lg font-bold font-mono text-cyan-400">--°</span>
           <span class="text-[10px] text-slate-500">髖-膝-踝</span>
         </div>
       </div>
@@ -757,7 +741,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       載入影片並完成整段骨架分析後，這裡會顯示實際辨識覆蓋率。
     </div>
 
-    <section id="progressTracker" aria-labelledby="progressTitle">
+    <details id="progressSection" class="mt-3 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2">
+      <summary class="cursor-pointer text-xs font-semibold text-slate-300">比較自己的前後影片（選用）</summary>
+    <section id="progressTracker" aria-labelledby="progressTitle" class="mt-3">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h3 id="progressTitle" class="text-sm font-bold text-slate-100">進步追蹤</h3>
@@ -768,30 +754,31 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           <button id="btnClearBaselines" class="bg-slate-900 hover:bg-slate-800 text-slate-400 text-xs px-3 py-2 rounded-lg border border-slate-700">清除紀錄</button>
         </div>
       </div>
-      <div id="progressList" aria-live="polite"><span class="text-[11px] text-slate-500">尚未儲存比較基準。</span></div>
+      <div id="progressList" aria-live="polite"><span class="text-xs text-slate-400">尚未儲存比較基準。</span></div>
     </section>
+    </details>
 
-    <!-- Export Toolbar (PNG Frame & Full Motion Video) -->
-    <div id="exportActions" class="flex flex-wrap items-center justify-end gap-2.5 pt-1">
+    <div id="exportActions" class="mt-4 grid gap-2">
+      <button id="btnShareAI" class="bg-lime-400 hover:bg-lime-300 active:scale-95 text-slate-950 text-sm font-bold px-4 py-3 rounded-lg transition">
+        <span id="btnShareAIText">分享分析給教練／AI</span>
+      </button>
+      <details id="moreExports" class="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2">
+        <summary class="cursor-pointer text-xs font-semibold text-slate-300">更多輸出格式</summary>
+        <div class="mt-2 grid gap-2 sm:grid-cols-3">
       <button id="btnExportPNG" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-100 text-xs font-semibold px-4 py-2.5 rounded-xl border border-slate-700 transition flex items-center gap-1.5 shadow-sm">
-        <span>📷</span>
-        <span>輸出目前畫面 (PNG)</span>
+        <span>目前畫面 PNG</span>
       </button>
 
-      <button id="btnExportVideo" class="bg-lime-400 hover:bg-lime-300 active:scale-95 text-slate-950 text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-md">
-        <span>🎬</span>
+      <button id="btnExportVideo" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-100 text-xs font-semibold px-4 py-2.5 rounded-lg border border-slate-700 transition">
         <span id="btnExportVideoText">輸出骨架分析影片</span>
       </button>
-      <button id="btnExportAI" class="bg-violet-500 hover:bg-violet-400 active:scale-95 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-md">
-        <span>✨</span>
+      <button id="btnExportAI" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-100 text-xs font-semibold px-4 py-2.5 rounded-lg border border-slate-700 transition">
         <span>下載 AI 教練分析包</span>
       </button>
-      <button id="btnShareAI" class="bg-sky-500 hover:bg-sky-400 active:scale-95 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-md">
-        <span>↗</span>
-        <span id="btnShareAIText">分享給 AI／教練</span>
-      </button>
+        </div>
+      </details>
     </div>
-    <p class="mt-2 text-[11px] text-slate-500 leading-relaxed">AI 分析包是文字檔，包含拍攝條件、目前數值、關鍵事件與提問格式；不含原始影片，也不會自動上傳。「分享」只會在你按下後開啟手機分享選單；不支援時改為複製文字。</p>
+    <p class="mt-2 text-xs text-slate-400 leading-relaxed">只在你按下後開啟分享選單；分析包不含原始影片，也不會自動上傳。</p>
     <p id="aiHandoffStatus" class="mt-1 text-[11px] text-sky-300" aria-live="polite"></p>
 
     </section>
@@ -801,9 +788,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
   <!-- Video Export Progress Modal -->
   <div id="exportModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl flex flex-col items-center">
-      <div class="w-12 h-12 rounded-full bg-lime-400/20 text-lime-400 flex items-center justify-center text-2xl mb-3 animate-spin">
-        ⚙️
-      </div>
       <h3 class="text-base font-bold text-white mb-1">正在合成骨架影片</h3>
       <p id="exportFormatNotice" class="text-xs text-slate-400 mb-4">格式偵測中...</p>
       
@@ -938,6 +922,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     };
     const captureQualityBadge = document.getElementById('captureQualityBadge');
     const captureQualityAdvice = document.getElementById('captureQualityAdvice');
+    const sessionSetup = document.getElementById('sessionSetup');
+    const sessionSetupStatus = document.getElementById('sessionSetupStatus');
     let captureQuality = { fullBodyVisible: false, cameraStable: false, singleUneditedPitch: false, comparableSetup: false };
     function syncCaptureQuality() {
       for (const [key, control] of Object.entries(qualityControls)) control.checked = !!captureQuality[key];
@@ -952,9 +938,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       captureQualityAdvice.className = `mt-2 text-[11px] leading-relaxed ${coreReady ? 'text-lime-200' : 'text-amber-200'}`;
     }
     for (const [key, control] of Object.entries(qualityControls)) {
-      control.addEventListener('change', () => { captureQuality[key] = control.checked; syncCaptureQuality(); });
+      control.addEventListener('change', () => { captureQuality[key] = control.checked; syncCaptureQuality(); updateSessionSetupStatus(); });
     }
-    syncCaptureQuality();
     let analysisContext = { athleteSlot: 'A', handedness: 'unknown', ageGroup: 'unknown', cameraView: 'unknown', surface: 'unknown', condition: 'unknown' };
     try {
       const saved = JSON.parse(localStorage.getItem('pf-analysis-context') || 'null');
@@ -963,6 +948,15 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const contextFieldLabels = { handedness: '投球手', ageGroup: '年齡層', cameraView: '拍攝視角', surface: '投球環境', condition: '身體狀況' };
     function missingAnalysisContext(context = analysisContext) {
       return Object.keys(contextFieldLabels).filter(key => !context[key] || context[key] === 'unknown');
+    }
+    function sessionSetupComplete() {
+      return missingAnalysisContext().length === 0
+        && captureQuality.fullBodyVisible && captureQuality.cameraStable && captureQuality.singleUneditedPitch;
+    }
+    function updateSessionSetupStatus() {
+      const complete = sessionSetupComplete();
+      sessionSetupStatus.textContent = complete ? '完成' : '開始前完成';
+      sessionSetupStatus.className = `ml-2 text-xs font-normal ${complete ? 'text-lime-200' : 'text-amber-200'}`;
     }
     function syncAnalysisContext() {
       for (const [key, control] of Object.entries(contextControls)) {
@@ -987,11 +981,14 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         try { localStorage.setItem('pf-analysis-context', JSON.stringify(analysisContext)); } catch (_) {}
         if (key === 'handedness') sepCache = null;
         syncAnalysisContext();
+        updateSessionSetupStatus();
         contextSaved.classList.remove('hidden');
         setTimeout(() => contextSaved.classList.add('hidden'), 1400);
       });
     }
     syncAnalysisContext();
+    syncCaptureQuality();
+    updateSessionSetupStatus();
     let isTimelineDragging = false;
     let timelineSeekTarget = null;
     let showSkeleton = true;
@@ -1936,6 +1933,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     function handleVideoFile(file) {
       if (!file) return;
+      if (!sessionSetupComplete()) sessionSetup.open = true;
       btnClearVideo.classList.remove('hidden');
       endScrubSession();
       ++sourceGeneration; ++playbackGeneration; isPlaying = false; invalidatePosePresentation(); lastSentFrame = null;
@@ -1991,7 +1989,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         // 檢查 30 秒限制
         if (videoDuration > MAX_ALLOWED_DURATION) {
           effectiveDuration = MAX_ALLOWED_DURATION;
-          durationWarningText.textContent = `⚠️ 影片長度為 ${videoDuration.toFixed(1)} 秒，已超過 30 秒上限。為保持流暢分析，系統已為您截取前 30 秒。`;
+          durationWarningText.textContent = `影片長度為 ${videoDuration.toFixed(1)} 秒，已超過 30 秒上限。為保持流暢分析，系統已為您截取前 30 秒。`;
           durationWarning.classList.remove('hidden');
         } else {
           effectiveDuration = videoDuration;
@@ -2019,7 +2017,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         emptyPrompt.classList.remove('hidden');
         statusText.textContent = "影片無法開啟或格式不支援";
         statusDot.className = "w-2 h-2 rounded-full bg-rose-400";
-        alert("⚠️ 無法開啟此影片！\n\n可能原因：\n1. 影片格式或編碼（例如 iPhone 預設 HEVC/H.265 或 ProRes）瀏覽器不支援原生解碼。\n2. 檔案權限受限或格式損毀。\n\n建議：請在手機或電腦選用標準 MP4 (H.264) 格式影片，或使用手機瀏覽器直接拍攝。");
+        alert("無法開啟此影片。\n\n可能原因：\n1. 影片格式或編碼（例如 iPhone 預設 HEVC/H.265 或 ProRes）瀏覽器不支援原生解碼。\n2. 檔案權限受限或格式損毀。\n\n建議：請在手機或電腦選用標準 MP4 (H.264) 格式影片，或使用手機瀏覽器直接拍攝。");
       };
     }
 
@@ -2696,12 +2694,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       drawSegment(rightShoulder, rightElbow, isEstimated ? '#fed7aa' : '#fb923c', 3.5);
       drawSegment(rightElbow, rightWrist, isEstimated ? '#fed7aa' : '#fb923c', 3.5);
 
-      // D. 腿部連線 (左腿綠、右腿紫)
+      // D. 腿部連線（左腿綠、右腿青）
       drawSegment(leftHip, leftKnee, isEstimated ? '#bbf7d0' : '#34d399', 3.5);
       drawSegment(leftKnee, leftAnkle, isEstimated ? '#bbf7d0' : '#34d399', 3.5);
 
-      drawSegment(rightHip, rightKnee, isEstimated ? '#e9d5ff' : '#c084fc', 3.5);
-      drawSegment(rightKnee, rightAnkle, isEstimated ? '#e9d5ff' : '#c084fc', 3.5);
+      drawSegment(rightHip, rightKnee, isEstimated ? '#cffafe' : '#22d3ee', 3.5);
+      drawSegment(rightKnee, rightAnkle, isEstimated ? '#cffafe' : '#22d3ee', 3.5);
 
       // E. 腳掌三角形 (Foot Triangles)
       // 左腳掌三角形 (27踝 - 29跟 - 31尖)
@@ -2727,13 +2725,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         ctx.lineTo(rightHeel.x, rightHeel.y);
         ctx.lineTo(rightToe.x, rightToe.y);
         ctx.closePath();
-        ctx.fillStyle = isEstimated ? 'rgba(251, 191, 36, 0.25)' : 'rgba(192, 132, 252, 0.3)';
+        ctx.fillStyle = isEstimated ? 'rgba(251, 191, 36, 0.25)' : 'rgba(34, 211, 238, 0.3)';
         ctx.fill();
-        ctx.strokeStyle = isEstimated ? '#fbbf24' : '#c084fc';
+        ctx.strokeStyle = isEstimated ? '#fbbf24' : '#22d3ee';
         ctx.lineWidth = 2;
         ctx.stroke();
       } else if (rightAnkle && rightToe) {
-        drawSegment(rightAnkle, rightToe, '#c084fc', 2.5);
+        drawSegment(rightAnkle, rightToe, '#22d3ee', 2.5);
       }
 
       // F. 頭部位置小點與連線；fallback 估算採虛線琥珀色樣式以示區分
@@ -2843,9 +2841,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       drawJointNode(leftKnee, '#34d399');
       drawJointNode(leftAnkle, '#34d399');
 
-      drawJointNode(rightHip, '#c084fc');
-      drawJointNode(rightKnee, '#c084fc');
-      drawJointNode(rightAnkle, '#c084fc');
+      drawJointNode(rightHip, '#22d3ee');
+      drawJointNode(rightKnee, '#22d3ee');
+      drawJointNode(rightAnkle, '#22d3ee');
 
       // H. 角度量測計算
       const leftElbowAngle = calculateAngle(lm[11], lm[13], lm[15]);
@@ -2964,7 +2962,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
             slot: rightKneeSlot,
             slotX: rightKneeSlot === 'left' ? perim.left - marginX : perim.right + marginX,
             slotY: perim.top + perim.h * 0.68,
-            color: '#c084fc'
+            color: '#22d3ee'
           });
         }
         if (leftKneeAngle !== null && leftKnee) {
@@ -3821,7 +3819,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         }
       } finally {
         btnShareAI.disabled = false;
-        btnShareAIText.textContent = '分享給 AI／教練';
+        btnShareAIText.textContent = '分享分析給教練／AI';
       }
     });
 

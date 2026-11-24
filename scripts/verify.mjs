@@ -14,7 +14,7 @@ const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(match => match[1]);
 const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
 if (duplicates.length) fail(`Duplicate HTML ids: ${duplicates.join(', ')}`);
 
-for (const requiredId of ['videoPlayer', 'scrubber', 'btnExportPNG', 'btnExportVideo', 'btnExportAI', 'btnShareAI', 'aiHandoffStatus', 'btnShareApp', 'btnInstallApp', 'ctxAthleteSlot', 'ctxHandedness', 'ctxAgeGroup', 'ctxCameraView', 'ctxSurface', 'ctxCondition', 'contextReadiness', 'qualityFullBody', 'qualityStable', 'qualitySinglePitch', 'qualityComparable', 'captureQualityBadge', 'analysisCoverage', 'btnMarkFoot', 'btnMarkRelease', 'btnResetEvents', 'btnSaveBaseline', 'btnClearBaselines', 'progressList']) {
+for (const requiredId of ['videoPlayer', 'scrubber', 'sessionSetup', 'sessionSetupStatus', 'viewSettings', 'moreExports', 'progressSection', 'btnExportPNG', 'btnExportVideo', 'btnExportAI', 'btnShareAI', 'aiHandoffStatus', 'btnShareApp', 'btnInstallApp', 'ctxAthleteSlot', 'ctxHandedness', 'ctxAgeGroup', 'ctxCameraView', 'ctxSurface', 'ctxCondition', 'contextReadiness', 'qualityFullBody', 'qualityStable', 'qualitySinglePitch', 'qualityComparable', 'captureQualityBadge', 'analysisCoverage', 'btnMarkFoot', 'btnMarkRelease', 'btnResetEvents', 'btnSaveBaseline', 'btnClearBaselines', 'progressList']) {
   if (!ids.includes(requiredId)) fail(`Required control is missing: ${requiredId}`);
 }
 for (const requiredBehavior of [
@@ -29,6 +29,9 @@ for (const requiredBehavior of [
 }
 for (const qualityBehavior of ['analysisCoverageSnapshot', 'operationalThreshold = 0.8', 'readyForAutomatedSummary', '80% 是 PitchFrame 的保守操作門檻']) {
   if (!html.includes(qualityBehavior)) fail(`Pose coverage safeguard is missing: ${qualityBehavior}`);
+}
+for (const simplificationBehavior of ['sessionSetupComplete()', 'sessionSetup.open = true', '分享分析給教練／AI']) {
+  if (!html.includes(simplificationBehavior)) fail(`Progressive disclosure behavior is missing: ${simplificationBehavior}`);
 }
 for (const handoffBehavior of ['navigator.canShare({ files: [file] })', 'navigator.clipboard.writeText(content)', "err.name === 'AbortError'"]) {
   if (!html.includes(handoffBehavior)) fail(`AI handoff behavior is missing: ${handoffBehavior}`);
