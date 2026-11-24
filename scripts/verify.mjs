@@ -14,8 +14,15 @@ const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(match => match[1]);
 const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
 if (duplicates.length) fail(`Duplicate HTML ids: ${duplicates.join(', ')}`);
 
-for (const requiredId of ['videoPlayer', 'scrubber', 'btnExportPNG', 'btnExportVideo', 'btnExportAI', 'btnShareApp', 'btnInstallApp', 'ctxAthleteSlot', 'ctxHandedness', 'ctxAgeGroup', 'ctxCameraView', 'ctxSurface', 'ctxCondition', 'btnMarkFoot', 'btnMarkRelease', 'btnResetEvents', 'btnSaveBaseline', 'btnClearBaselines', 'progressList']) {
+for (const requiredId of ['videoPlayer', 'scrubber', 'btnExportPNG', 'btnExportVideo', 'btnExportAI', 'btnShareApp', 'btnInstallApp', 'ctxAthleteSlot', 'ctxHandedness', 'ctxAgeGroup', 'ctxCameraView', 'ctxSurface', 'ctxCondition', 'qualityFullBody', 'qualityStable', 'qualitySinglePitch', 'qualityComparable', 'captureQualityBadge', 'btnMarkFoot', 'btnMarkRelease', 'btnResetEvents', 'btnSaveBaseline', 'btnClearBaselines', 'progressList']) {
   if (!ids.includes(requiredId)) fail(`Required control is missing: ${requiredId}`);
+}
+for (const requiredBehavior of [
+  "source: 'self-reported-by-user'",
+  'baselineQualityReady',
+  'contextComparable && qualityCoreReady && captureQuality.comparableSetup && baselineQualityReady'
+]) {
+  if (!html.includes(requiredBehavior)) fail(`Capture-quality safeguard is missing: ${requiredBehavior}`);
 }
 
 const localRefs = [...html.matchAll(/(?:src|href)="\.\/([^"?#]+)"/g)].map(match => match[1]);

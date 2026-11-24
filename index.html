@@ -238,6 +238,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     #progressTracker { margin-top: 18px; padding: 14px; border: 1px solid #2a3e4e; border-radius: 12px; background: #0d1822; }
     #progressList { display: grid; gap: 6px; margin-top: 10px; }
     .progress-item { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid #203342; color: #a8bbc8; font-size: 11px; line-height: 1.5; }
+    #captureQuality { border: 1px solid #2a3e4e; border-radius: 12px; background: #0d1822; padding: 14px; }
+    #captureChecklist { display: grid; gap: 8px; margin-top: 10px; }
+    #captureChecklist label { display: flex; align-items: flex-start; gap: 9px; color: #c4d2dc; font-size: 12px; line-height: 1.45; cursor: pointer; }
+    #captureChecklist input { width: 18px; height: 18px; margin-top: 0; accent-color: #a3e635; flex: 0 0 auto; }
     #analysisContext { margin: -6px 0 14px; padding: 14px 16px; border: 1px solid #2a3e4e; border-radius: 12px; background: #0d1822; }
     #contextFields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-top: 10px; }
     #contextFields label { display: grid; gap: 5px; color: #a8bbc8; font-size: 11px; }
@@ -424,6 +428,23 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         </label>
       </div>
       <p id="conditionWarning" class="hidden mt-3 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-200"></p>
+    </section>
+
+    <section id="captureQuality" aria-labelledby="captureQualityTitle">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2 id="captureQualityTitle" class="text-sm font-bold text-slate-100">拍攝品質檢查</h2>
+          <p class="mt-1 text-[11px] text-slate-400">勾選你確定做到的項目。這些條件會寫入分析包，讓教練或 AI 先判斷資料能不能比較。</p>
+        </div>
+        <span id="captureQualityBadge" class="shrink-0 rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-[11px] font-bold text-amber-200">待確認</span>
+      </div>
+      <div id="captureChecklist">
+        <label><input id="qualityFullBody" type="checkbox"><span>全身、雙腳與投球手從開始到出手都在畫面內</span></label>
+        <label><input id="qualityStable" type="checkbox"><span>手機固定、沒有跟著球員平移或大幅晃動</span></label>
+        <label><input id="qualitySinglePitch" type="checkbox"><span>影片主要是一球，前後保留約 1 秒，沒有剪接或慢動作轉檔</span></label>
+        <label><input id="qualityComparable" type="checkbox"><span>若要比較前後：手機位置、方向、畫面比例與投手丘／平地和基準影片一致</span></label>
+      </div>
+      <p id="captureQualityAdvice" class="mt-2 text-[11px] leading-relaxed text-amber-200">尚未確認拍攝條件；可以分析，但請勿據此宣稱進步或退步。</p>
     </section>
 
     <div id="stageStatusBar" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;flex-shrink:0">
@@ -893,6 +914,31 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     };
     const contextSaved = document.getElementById('contextSaved');
     const conditionWarning = document.getElementById('conditionWarning');
+    const qualityControls = {
+      fullBodyVisible: document.getElementById('qualityFullBody'),
+      cameraStable: document.getElementById('qualityStable'),
+      singleUneditedPitch: document.getElementById('qualitySinglePitch'),
+      comparableSetup: document.getElementById('qualityComparable')
+    };
+    const captureQualityBadge = document.getElementById('captureQualityBadge');
+    const captureQualityAdvice = document.getElementById('captureQualityAdvice');
+    let captureQuality = { fullBodyVisible: false, cameraStable: false, singleUneditedPitch: false, comparableSetup: false };
+    function syncCaptureQuality() {
+      for (const [key, control] of Object.entries(qualityControls)) control.checked = !!captureQuality[key];
+      const coreReady = captureQuality.fullBodyVisible && captureQuality.cameraStable && captureQuality.singleUneditedPitch;
+      captureQualityBadge.textContent = coreReady ? '基本條件通過' : '資料品質待確認';
+      captureQualityBadge.className = coreReady
+        ? 'shrink-0 rounded-full border border-lime-500/50 bg-lime-500/10 px-2 py-1 text-[11px] font-bold text-lime-200'
+        : 'shrink-0 rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-[11px] font-bold text-amber-200';
+      captureQualityAdvice.textContent = coreReady
+        ? (captureQuality.comparableSetup ? '拍攝基本條件與前後比較條件皆已自行確認。仍請人工檢查關鍵影格。' : '可做單次觀察；若要比較前後，還需確認相同拍攝設定。')
+        : '尚未確認拍攝基本條件；可以逐格查看，但請勿據此宣稱進步或退步。';
+      captureQualityAdvice.className = `mt-2 text-[11px] leading-relaxed ${coreReady ? 'text-lime-200' : 'text-amber-200'}`;
+    }
+    for (const [key, control] of Object.entries(qualityControls)) {
+      control.addEventListener('change', () => { captureQuality[key] = control.checked; syncCaptureQuality(); });
+    }
+    syncCaptureQuality();
     let analysisContext = { athleteSlot: 'A', handedness: 'unknown', ageGroup: 'unknown', cameraView: 'unknown', surface: 'unknown', condition: 'unknown' };
     try {
       const saved = JSON.parse(localStorage.getItem('pf-analysis-context') || 'null');
@@ -1837,6 +1883,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       
       // 重置狀態
       poseCache.clear(); worldCache.clear(); resetSeparation();
+      captureQuality = { fullBodyVisible: false, cameraStable: false, singleUneditedPitch: false, comparableSetup: false };
+      syncCaptureQuality();
       cancelTrackAnalysis();
       targetChoice = null; hidePickOverlay(); btnRepick.classList.add('hidden');
       smoothedCalloutBox = null;
@@ -3510,6 +3558,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         schema: 'pitchframe-progress-v1',
         savedAt: new Date().toISOString(),
         context: { ...analysisContext },
+        captureQuality: { ...captureQuality, source: 'self-reported-by-user' },
         source: {
           durationSeconds: Number((effectiveDuration || 0).toFixed(3)),
           width: video.videoWidth || null,
@@ -3563,12 +3612,15 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const sep = getSeparation();
       const currentComparison = currentSessionSnapshot(sep);
       const baseline = progressHistory.length ? progressHistory.find(item => (item.context.athleteSlot || 'A') === analysisContext.athleteSlot) || null : null;
-      const sameContext = !!(baseline && currentComparison
+      const contextComparable = !!(baseline && currentComparison
         && (baseline.context.athleteSlot || 'A') === analysisContext.athleteSlot
         && baseline.context.handedness === analysisContext.handedness
         && baseline.context.cameraView !== 'unknown'
         && baseline.context.cameraView === analysisContext.cameraView
         && baseline.context.surface === analysisContext.surface);
+      const qualityCoreReady = captureQuality.fullBodyVisible && captureQuality.cameraStable && captureQuality.singleUneditedPitch;
+      const baselineQualityReady = !!(baseline?.captureQuality?.fullBodyVisible && baseline?.captureQuality?.cameraStable && baseline?.captureQuality?.singleUneditedPitch && baseline?.captureQuality?.comparableSetup);
+      const sameContext = contextComparable && qualityCoreReady && captureQuality.comparableSetup && baselineQualityReady;
       const currentPhase = currentComparison?.events?.footStrikeToReleaseMilliseconds;
       const baselinePhase = baseline?.events?.footStrikeToReleaseMilliseconds;
       const phaseDelta = sameContext && Number.isFinite(currentPhase) && Number.isFinite(baselinePhase)
@@ -3600,6 +3652,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           throwingSurface: analysisContext.surface,
           condition: analysisContext.condition,
           privacyNote: '未收集姓名、球隊或其他身分資料'
+        },
+        captureQuality: {
+          ...captureQuality,
+          coreReady: qualityCoreReady,
+          comparisonReady: qualityCoreReady && captureQuality.comparableSetup,
+          source: 'self-reported-by-user'
         },
         currentFrame: {
           timeSeconds: Number(displayedFrameTime().toFixed(3)),
