@@ -1,0 +1,31 @@
+name: 功能建議
+description: 提議能改善觀察、教練溝通或前後比較的功能
+title: "[Idea] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: situation
+    attributes:
+      label: 使用情境
+      description: 是誰在什麼場合遇到什麼問題？
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: 希望達成的結果
+      description: 說明成功後家長、球員或教練能多做成什麼。
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: 如何驗證有效？
+      description: 例如縮短找到關鍵格的時間、能比較兩次影片、降低誤判。
+  - type: checkboxes
+    id: boundary
+    attributes:
+      label: 邊界確認
+      options:
+        - label: 這項建議不要求 PitchFrame 做醫療診斷或保證預測受傷。
+          required: true

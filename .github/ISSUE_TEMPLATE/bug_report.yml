@@ -1,0 +1,55 @@
+name: 問題回報
+description: 回報可重現的播放、姿態辨識、逐格、匯出或 PWA 問題
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        請勿附上可識別兒童身分或未取得同意的影片。可改用去識別化截圖、時間點與影片規格說明問題。
+  - type: textarea
+    id: problem
+    attributes:
+      label: 發生什麼問題？
+      description: 說明預期結果與實際結果。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 重現步驟
+      placeholder: |
+        1. 開啟公開站
+        2. 選擇影片
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 裝置與瀏覽器
+      placeholder: 例如 iPhone 15 / iOS 18 / Safari
+    validations:
+      required: true
+  - type: input
+    id: video
+    attributes:
+      label: 影片規格（請勿貼私人影片連結）
+      placeholder: 例如 1920×1080、60 fps、MP4、側後方拍攝
+  - type: dropdown
+    id: network
+    attributes:
+      label: 發生時是否離線？
+      options:
+        - 否，正常連線
+        - 是，已安裝 PWA 後離線使用
+        - 不確定
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 隱私確認
+      options:
+        - label: 我沒有在此 Issue 公開未經同意或可識別兒童身分的素材。
+          required: true

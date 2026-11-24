@@ -4,6 +4,8 @@
 
 [立即使用 PitchFrame](https://bddgtw-tw.github.io/pitchframe-baseball-lab/) ・ [回報問題](https://github.com/bddgtw-tw/pitchframe-baseball-lab/issues)
 
+![PitchFrame 公開版介面：家長三步操作、逐格播放器與本機 AI 分析](assets/pitchframe-preview.png)
+
 PitchFrame 是一個免費、免登入、可離線使用的少棒投球觀察 PWA。影片在瀏覽器本機分析，不會上傳到伺服器。你可以逐格播放、疊加姿態骨架與關節角度、觀察前腳落地附近的髖肩分離趨勢，再匯出畫面、分析影片或一份可交給 AI／教練討論的結構化分析包。
 
 如果這個工具幫你和孩子進行了一次更具體的動作討論，歡迎在 GitHub 按下 **Star**。Star 會讓更多少棒家庭找到它，也讓我們知道值得繼續維護。
