@@ -1,0 +1,124 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bddgtw-tw.github.io/pitchframe-baseball-lab/schemas/pitchframe-analysis-package-v2.schema.json",
+  "title": "PitchFrame AI Analysis Package v2",
+  "description": "De-identified, evidence-first metadata exported by PitchFrame. It is not a medical diagnosis or a validated 3D biomechanics measurement.",
+  "type": "object",
+  "required": [
+    "schema",
+    "createdAt",
+    "source",
+    "athleteContext",
+    "analysisReadiness",
+    "captureQuality",
+    "estimatedEvents",
+    "comparison",
+    "limitations"
+  ],
+  "properties": {
+    "schema": { "const": "pitchframe-analysis-package-v2" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "source": {
+      "type": "object",
+      "required": ["originalFileNameIncluded", "durationSeconds", "width", "height", "frameIndex"],
+      "properties": {
+        "originalFileNameIncluded": { "const": false },
+        "durationSeconds": { "type": "number", "minimum": 0 },
+        "width": { "type": ["integer", "null"], "minimum": 1 },
+        "height": { "type": ["integer", "null"], "minimum": 1 },
+        "frameIndex": {
+          "type": ["object", "null"],
+          "properties": {
+            "frameCount": { "type": "integer", "minimum": 0 },
+            "fps": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+            "variableFrameRate": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "athleteContext": {
+      "type": "object",
+      "required": ["anonymousAthleteSlot", "throwingHand", "ageGroup", "cameraView", "throwingSurface", "condition", "privacyNote"],
+      "properties": {
+        "anonymousAthleteSlot": { "type": "string" },
+        "throwingHand": { "type": "string" },
+        "ageGroup": { "type": "string" },
+        "cameraView": { "type": "string" },
+        "throwingSurface": { "type": "string" },
+        "condition": { "type": "string" },
+        "privacyNote": { "type": "string" }
+      }
+    },
+    "analysisReadiness": {
+      "type": "object",
+      "required": ["contextComplete", "missingFields", "normalConditionForComparison", "poseCoverage"],
+      "properties": {
+        "contextComplete": { "type": "boolean" },
+        "missingFields": { "type": "array", "items": { "type": "string" } },
+        "normalConditionForComparison": { "type": "boolean" },
+        "poseCoverage": {
+          "type": "object",
+          "required": ["readyForAutomatedSummary"],
+          "properties": {
+            "readyForAutomatedSummary": { "type": "boolean" }
+          },
+          "additionalProperties": true
+        }
+      }
+    },
+    "captureQuality": {
+      "type": "object",
+      "required": ["fullBodyVisible", "cameraStable", "singleUneditedPitch", "comparableSetup", "coreReady", "comparisonReady", "source"],
+      "properties": {
+        "fullBodyVisible": { "type": "boolean" },
+        "cameraStable": { "type": "boolean" },
+        "singleUneditedPitch": { "type": "boolean" },
+        "comparableSetup": { "type": "boolean" },
+        "coreReady": { "type": "boolean" },
+        "comparisonReady": { "type": "boolean" },
+        "source": { "const": "self-reported-by-user" }
+      }
+    },
+    "currentFrame": { "type": "object" },
+    "estimatedEvents": {
+      "type": "object",
+      "required": ["footStrikeSeconds", "footStrikeSource", "ballReleaseSeconds", "ballReleaseSource", "separationTrend", "separationSignal"],
+      "properties": {
+        "footStrikeSeconds": { "type": ["number", "null"], "minimum": 0 },
+        "footStrikeSource": { "type": ["string", "null"] },
+        "ballReleaseSeconds": { "type": ["number", "null"], "minimum": 0 },
+        "ballReleaseSource": { "type": ["string", "null"] },
+        "separationTrend": { "type": "string" },
+        "separationSignal": {
+          "type": "object",
+          "required": ["relativeLevel0To1", "unit", "validatedPhysicalMeasurement", "interpretation"],
+          "properties": {
+            "relativeLevel0To1": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+            "unit": { "const": "model-normalized-relative-signal" },
+            "validatedPhysicalMeasurement": { "const": false },
+            "interpretation": { "type": "string" }
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "currentEventMetrics": { "type": "object" },
+    "comparison": {
+      "type": "object",
+      "required": ["current", "baseline", "footStrikeToReleaseDeltaMilliseconds", "validOnlyWhen", "sameContext"],
+      "properties": {
+        "current": { "type": ["object", "null"] },
+        "baseline": { "type": ["object", "null"] },
+        "footStrikeToReleaseDeltaMilliseconds": { "type": ["number", "null"] },
+        "validOnlyWhen": { "type": "string" },
+        "sameContext": { "type": "boolean" }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": true
+}

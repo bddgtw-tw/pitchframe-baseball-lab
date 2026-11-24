@@ -525,7 +525,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       </div>
       <div id="sepStripRow" class="hidden flex items-center gap-3" style="margin-top:-8px">
         <span class="text-[11px] text-slate-400 w-12 text-right">分離</span>
-        <canvas id="sepStrip" class="flex-1" style="height:18px;cursor:pointer" aria-label="髖肩分離熱度帶：白色是沒拉開，紅色是髖已轉開、肩還留在後面；點一下跳到那一格"></canvas>
+        <canvas id="sepStrip" class="flex-1" style="height:18px;cursor:pointer" aria-label="骨盆與上軀幹旋轉差趨勢：由灰到藍只表示模型估計的相對變化，不代表好壞；點一下跳到該影格"></canvas>
         <span class="w-12"></span>
       </div>
 
@@ -576,7 +576,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
             <span>〰</span>
             <span id="smoothStatusText">補間: 開</span>
           </button>
-          <button id="btnSeparation" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-400 text-xs px-2.5 py-2 rounded-lg border border-slate-700 transition font-medium flex items-center gap-1" title="髖肩分離：兩肩與兩髖四點連成平面，沒扭白色、扭開變紅">
+          <button id="btnSeparation" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-400 text-xs px-2.5 py-2 rounded-lg border border-slate-700 transition font-medium flex items-center gap-1" title="旋轉差趨勢：灰到藍只表示模型估計的相對變化，不代表好壞">
             <span>⟲</span>
             <span id="separationStatusText">髖肩分離: 開</span>
           </button>
@@ -609,9 +609,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
             <ul class="list-disc pl-5 mt-2 flex flex-col gap-1.5">
               <li>這裡觀察的是前腳落地附近，骨盆與上軀幹是否出現旋轉差；研究常稱 hip-to-shoulder 或 pelvis-trunk separation。——<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC9528701/" target="_blank" rel="noopener" class="text-lime-300 underline">青少年投手研究</a></li>
               <li><b>順序與時機要一起看</b>：投球動力鏈通常呈現骨盆旋轉峰值早於上軀幹，之後能量再往手臂與球傳遞。——<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC3445126/" target="_blank" rel="noopener" class="text-lime-300 underline">投球生物力學綜述</a></li>
-              <li>研究描述的典型近端到遠端順序為：骨盆 → 軀幹 → 上臂 → 前臂 → 手；個別球員仍需看完整動作與時機。——<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC9950989/" target="_blank" rel="noopener" class="text-lime-300 underline">臨床生物力學指南</a></li>
-              <li>少棒追蹤 7 年的研究：落地時的軀幹分離會<b>隨年齡自然增加</b>。小孩做得少是正常的，請跟他自己以前的影片比。——<a href="https://pubmed.ncbi.nlm.nih.gov/28968146/" target="_blank" rel="noopener" class="text-lime-300 underline">ASMI（Fleisig 等）</a></li>
-              <li>限制：這裡的深度是 AI 從單一畫面推測的。骨盆與軀幹轉速的精準時機，連高品質慢動作影片都看不出來，要靠實驗室 3D 量測。——<a href="https://drivelinebaseball.com/blogs/blog/pitching-assessments-changing-mechanics" target="_blank" rel="noopener" class="text-lime-300 underline">Driveline</a></li>
+              <li>研究描述的典型近端到遠端順序為：骨盆 → 軀幹 → 上臂 → 前臂 → 手；實際順序有個體差異，不能用單次投球套一個固定模板。——<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC9950989/" target="_blank" rel="noopener" class="text-lime-300 underline">臨床生物力學指南</a></li>
+              <li>少棒追蹤研究顯示落地時的軀幹分離會隨年齡發展；不要把成人或職業球員數值當成兒童標準。——<a href="https://pubmed.ncbi.nlm.nih.gov/28968146/" target="_blank" rel="noopener" class="text-lime-300 underline">青少年縱向研究</a></li>
+              <li>限制：少棒動力傳遞研究使用 14 台攝影機（250 Hz）與測力板（1000 Hz），而且 9–13 歲球員差異很大。手機單機位只能協助回看片段，不能宣稱量到能量傳遞或精準旋轉時機。——<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC9532595/" target="_blank" rel="noopener" class="text-lime-300 underline">少棒動力鏈研究</a></li>
             </ul>
           </details>
         </section>
@@ -2242,14 +2242,14 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     /* ==========================================================================
        髖肩分離（AI 推測，不顯示度數）
-       - 兩肩、兩髖四點：共面＝沒扭（白），扭開＝紅；透明度固定，只變顏色、不畫線。以「髖中點→肩中點」為脊椎軸，
+       - 兩肩、兩髖四點的相對旋轉以灰→藍呈現；顏色只表示模型內部趨勢，不代表技術好壞。以「髖中點→肩中點」為脊椎軸，
          把肩線、髖線投影到垂直脊椎的平面上，兩線夾角就是扭轉；可扣掉軀幹前傾／側傾。
        - 深度是 MediaPipe 從單一畫面推測的，只當趨勢看，所以只呈現顏色與時機，不顯示數字。
        - 看的重點依同儕審查研究：前腳落地附近的骨盆－上軀幹旋轉差，以及近端到遠端的動作順序。
-       - 門檻是顯示用的選擇，不是標準值；小角度一律當沒扭，避免推測雜訊造成閃爍。
+       - 門檻只用來抑制低幅度推測雜訊，不是適用任何年齡的生物力學標準值。
        ========================================================================== */
     const SEP_MIN_VIS = 0.5, SEP_ON_DEG = 10, SEP_FULL_DEG = 35;
-    const SEP_LOW = [255, 255, 255], SEP_HIGH = [239, 68, 68], SEP_ALPHA = 0.85; // 白 → 紅，透明度固定；以相乘疊在影片上，白色＝不變，紅色＝染紅但球員仍清楚
+    const SEP_LOW = [203, 213, 225], SEP_HIGH = [34, 211, 238], SEP_ALPHA = 0.85; // 灰 → 藍，只表示相對趨勢；不使用紅綠好壞語意
     let separationEnabled = true;
     try { separationEnabled = localStorage.getItem('pf-separation') !== '0'; } catch (_) {}
     let sepCache = null, manualFoot = null, manualRelease = null;
@@ -2347,9 +2347,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (!done) html = '骨架分析完成後，會自動找出前腳落地那一格。';
       else if (sepCache.foot === null) html = '<b>找不到前腳落地</b><br><span class="text-slate-400">請逐格到前腳剛踩地的那一格，按「這格設為落地」。</span>';
       else if (sepCache.footLevel === null) html = '<b>落地這幾格判斷不了</b><br><span class="text-slate-400">肩或髖被擋住、骨架不清楚，所以不上色、不猜。可換一格按「這格設為落地」。</span>';
-      else if (sepCache.footLevel >= 0.5) { border = '#ef4444';
-        html = '<b>前腳落地：髖已轉開、肩還留在後面</b><br><span class="text-slate-400">有做到髖肩分離。接著看熱度帶：紅色應該在落地前後出現，出手前退回白色。</span>'; }
-      else html = '<b>前腳落地：髖肩幾乎沒有拉開</b><br><span class="text-slate-400">可能是髖還沒開，或肩膀已經跟著開了。逐格看落地前後幾格，比較胸口和皮帶扣的朝向。</span>';
+      else if (sepCache.footLevel >= 0.5) { border = '#22d3ee';
+        html = '<b>落地附近：模型估計旋轉差趨勢較明顯</b><br><span class="text-slate-400">這只是單機位相對趨勢，不代表做得好、球速更快或受傷風險更低。請逐格確認肩髖點位，再交給教練結合完整動作判讀。</span>'; }
+      else html = '<b>落地附近：模型未見明顯旋轉差趨勢</b><br><span class="text-slate-400">可能是實際差異較小，也可能受拍攝角度、遮擋或深度估計影響；不能據此要求孩子增加扭轉。</span>';
       if (done && sepCache.foot !== null) html += `<br><span class="text-slate-500 text-[11px]">落地點：${sepCache.manualFoot ? '手動標記' : 'AI 自動估計'}；出手點：${sepCache.release === null ? '尚未找到' : sepCache.manualRelease ? '手動標記' : 'AI 自動估計'}。不正確可逐格後手動改。</span>`;
       sepVerdict.innerHTML = html;
       sepVerdict.style.borderColor = border;
@@ -2385,9 +2385,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
 
 
-    /* 扭轉張力：只用顏色。畫在 sepTintCanvas（mix-blend-mode: multiply），透明度固定；
-       四點共面（沒扭）＝白＝影片不變，扭越多越紅＝那一塊被染紅，球員的衣服與輪廓仍看得見。
-       程度來自 sepLevel（推測扭轉角經平滑後的 0..1），不畫線、不顯示數字。
+    /* 旋轉差模型訊號：只用灰→藍顏色。畫在 sepTintCanvas（mix-blend-mode: multiply），透明度固定；
+       顏色只表示同一段影片內的相對變化，不代表好壞或真實物理量，並保留球員衣服與輪廓可見性。
+       程度來自 sepLevel（推測旋轉差經平滑後的 0..1），不畫線、不顯示數字。
        c = [左肩, 右肩, 右髖, 左髖]（畫面座標） */
     function drawTwistFill(ctx, c, t) {
       ctx.save();
@@ -2412,7 +2412,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         drawTwistFill(sepTintCtx, c, t);
       }
       ctx.restore();
-      // 俯視小圖：沿脊椎往下看，白線＝髖、灰線＝肩，中間色塊＝扭開
+      // 俯視示意：沿脊椎往下看，白線＝髖、灰線＝肩；色塊只呈現模型相對訊號
       const sg = sep.signed.get(key);
       if (sg !== undefined && t !== null && t !== undefined) {
         const dpr = ctx.canvas.width / Math.max(1, ctx.canvas.clientWidth || ctx.canvas.width);
@@ -2439,8 +2439,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       sepBadge.classList.toggle('hidden', !show);
       if (!show) return;
       if (sep.footLevel === null) { sepBadge.textContent = '前腳落地：這幾格判斷不了'; sepBadge.style.borderColor = '#64748b'; }
-      else if (sep.footLevel >= 0.5) { sepBadge.textContent = '前腳落地：髖已開、肩還關著'; sepBadge.style.borderColor = '#ef4444'; }
-      else { sepBadge.textContent = '前腳落地：髖肩幾乎沒有拉開'; sepBadge.style.borderColor = '#e2e8f0'; }
+      else if (sep.footLevel >= 0.5) { sepBadge.textContent = '落地附近：旋轉差趨勢較明顯（估計）'; sepBadge.style.borderColor = '#22d3ee'; }
+      else { sepBadge.textContent = '落地附近：未見明顯旋轉差趨勢（估計）'; sepBadge.style.borderColor = '#cbd5e1'; }
     }
     function jumpToKey(key) {
       if (key === null || key === undefined || !effectiveDuration) return;
@@ -3619,7 +3619,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const phaseMs = footTime !== null && releaseTime !== null && releaseTime >= footTime
         ? Math.round((releaseTime - footTime) * 1000) : null;
       return {
-        schema: 'pitchframe-progress-v1',
+        schema: 'pitchframe-progress-v2',
         savedAt: new Date().toISOString(),
         context: { ...analysisContext },
         captureQuality: { ...captureQuality, source: 'self-reported-by-user' },
@@ -3636,7 +3636,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           ballReleaseSeconds: releaseTime,
           ballReleaseSource: sep.release === null ? null : sep.manualRelease ? 'manual' : 'automatic-estimate',
           footStrikeToReleaseMilliseconds: phaseMs,
-          separationTrendLevel: sep.footLevel === null ? null : Number(sep.footLevel.toFixed(3))
+          modelRelativeSeparationSignal0To1: sep.footLevel === null ? null : Number(sep.footLevel.toFixed(3))
         },
         footStrikeMetrics: frameMetricsAtKey(sep.foot),
         ballReleaseMetrics: frameMetricsAtKey(sep.release)
@@ -3704,7 +3704,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         : '落地附近未見明顯的骨盆－上軀幹旋轉差趨勢';
       const poseCoverage = analysisCoverageSnapshot(sep);
       const data = {
-        schema: 'pitchframe-analysis-package-v1',
+        schema: 'pitchframe-analysis-package-v2',
         createdAt: new Date().toISOString(),
         source: {
           originalFileNameIncluded: false,
@@ -3755,7 +3755,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           eventDetectionReason: sep ? sep.eventReason : null,
           throwingWristIndex: sep ? sep.wristIndex : null,
           throwingWristSource: sep ? sep.wristSource : null,
-          separationTrend: separationObservation
+          separationTrend: separationObservation,
+          separationSignal: {
+            relativeLevel0To1: sep && sep.footLevel !== null ? Number(sep.footLevel.toFixed(3)) : null,
+            unit: 'model-normalized-relative-signal',
+            validatedPhysicalMeasurement: false,
+            interpretation: 'single-camera trend only; not an angle, score, velocity, energy-transfer measure, or injury-risk estimate'
+          }
         },
         currentEventMetrics: {
           footStrike: sep ? frameMetricsAtKey(sep.foot) : null,
@@ -3777,7 +3783,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       };
       return `# PitchFrame AI 教練分析包\n\n` +
         `> 目的：協助家長、球員與教練根據同一段影片提出可驗證的觀察。這不是醫療診斷或自動姿勢評分。\n\n` +
-        `## 給 AI 的任務\n\n請先檢查資料品質、拍攝視角、年齡層與限制。若 analysisReadiness.poseCoverage.readyForAutomatedSummary 不是 true，先說明資料不足並要求補拍或人工確認，不得提出動作修正。資料足夠時，再依「下肢承接 → 骨盆 → 上軀幹 → 手臂 → 出手」的順序分析。每一項建議都要引用具體時間點或數值，區分【觀察】【推論】【待確認】。只有 comparison.sameContext 為 true，且錄影距離、角度與影格率可比較時，才能描述前後變化；否則不得宣稱進步或退步。不要只因單一角度或單次投球判定好壞；不要給疼痛診斷。若 condition 是 pain 或 fatigued，先建議停止高強度投球、告知成人並尋求適當專業評估，不要把疲勞或疼痛直接改寫成技術缺陷。最後只提出 1 個最值得優先驗證的動作線索、1 個低風險練習方向，以及下次應如何用同角度重拍驗證。若沒有附關鍵畫面或影片，請先要求使用者補上，不要假裝看過。\n\n` +
+        `## 給 AI 的任務\n\n請先檢查資料品質、拍攝視角、年齡層與限制。若 analysisReadiness.poseCoverage.readyForAutomatedSummary 不是 true，先說明資料不足並要求補拍或人工確認，不得提出動作修正。資料足夠時，再依「下肢承接 → 骨盆 → 上軀幹 → 手臂 → 出手」的順序分析。每一項建議都要引用具體時間點或數值，區分【觀察】【推論】【待確認】。只有 comparison.sameContext 為 true，且錄影距離、角度與影格率可比較時，才能描述前後變化；否則不得宣稱進步或退步。髖肩分離欄位只是單機位模型的相對趨勢，不得解讀為越大越好、動力傳遞效率、球速或傷害風險。不要只因單一角度或單次投球判定好壞；不要給疼痛診斷。若 condition 是 pain 或 fatigued，先建議停止高強度投球、告知成人並尋求適當專業評估，不要把疲勞或疼痛直接改寫成技術缺陷。最後只提出 1 個最值得優先驗證的觀察線索，以及下次應如何用同角度重拍驗證；不要僅憑本分析包開立加重量、最大強度、增加投球量或強迫增加軀幹扭轉的訓練。若沒有附關鍵畫面或影片，請先要求使用者補上，不要假裝看過。\n\n` +
         `## 結構化資料\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\`\n\n` +
         `## 建議一起提供\n\n- 前腳落地前一格、落地格、出手格的 PNG\n- 原始影片或 PitchFrame 匯出的骨架影片\n- 投手慣用手、年齡層、這次是平地或投手丘\n- 當天是否疼痛或明顯疲勞（若有，先停止投球並尋求專業評估）\n`;
     }

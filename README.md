@@ -6,7 +6,7 @@
 
 [立即使用 PitchFrame](https://bddgtw-tw.github.io/pitchframe-baseball-lab/) ・ [回報問題](https://github.com/bddgtw-tw/pitchframe-baseball-lab/issues)
 
-![PitchFrame 公開版介面：家長三步操作、逐格播放器與本機 AI 分析](assets/pitchframe-preview.png)
+![PitchFrame 公開版介面：精簡的家長操作流程、逐格播放器與本機 AI 分析](assets/pitchframe-preview.png)
 
 PitchFrame 是一個免費、免登入、可離線使用的少棒投球觀察 PWA。影片在瀏覽器本機分析，不會上傳到伺服器。你可以逐格播放、疊加姿態骨架與關節角度、觀察前腳落地附近的髖肩分離趨勢，再匯出畫面、分析影片或一份可交給 AI／教練討論的結構化分析包。
 
@@ -26,19 +26,23 @@ PitchFrame 的價值不是自動打分，而是讓「觀察 → 建議 → 練�
 
 介面刻意只把「選片、逐格、確認事件、檢查可信度、分享」留在主流程。分析背景、顯示切換、標註、基準比較與其他下載格式都收在選用區，避免功能增加後讓家長第一次使用無所適從。
 
+想檢查每項功能的證據、限制與 AI 資料契約，請閱讀 [科學方法與安全界線](SCIENCE.md)。
+
+外部 AI 或開發工具可用 [`pitchframe-analysis-package-v2.schema.json`](schemas/pitchframe-analysis-package-v2.schema.json) 驗證分析包中的結構化 JSON，並參考[匿名範例](examples/pitchframe-analysis-package-v2.example.json)；Schema 明確禁止把旋轉差訊號當成已驗證的物理量。
+
 ## 主要功能
 
-- 真實 MP4 影格索引與 ±1／±5 格操作，支援可變幀率來源的保守處理。
+- 真實 MP4 影格索引與逐格操作，支援可變幀率來源的保守處理。
 - MediaPipe Pose 本機推論；沒有辨識到人物時不捏造骨架。
 - 多人畫面可點選要追蹤的球員。
 - 可設定左右投、年齡層、拍攝視角、投手丘／平地與疲勞／疼痛背景；不收姓名或球隊資料。
-- 關節角度、軀幹傾角、前腳落地與出手事件估計。
+- 關節角度、軀幹傾角、前腳落地與出手事件估計；數值預設不佔用家長主流程。
 - 前腳落地與出手點都可逐格人工校正，分析包會保留「人工／自動估計」來源。
 - 可用匿名球員 A／B／C 在裝置內保存最多 8 次去識別化基準，供同一球員、同手別、同視角與同環境的前後比較；不保存影片、圖片或原始檔名。
 - 進步追蹤比較的是「前腳落地到出手」相對時間，不拿不同影片的絕對秒數冒充進步。
 - 髖肩分離趨勢視覺化，並清楚標示單機位 AI 的限制。
-- 畫線、箭頭、圈選與文字註記。
-- 匯出目前 PNG、骨架分析影片、AI 教練分析包（Markdown + JSON）。
+- 選用的畫線、箭頭、圈選與文字註記。
+- 主操作可直接分享給教練／AI；PNG、骨架分析影片與分析包下載收在選用區。
 - PWA 安裝與離線使用；模型與程式可快取，使用者影片不進快取。
 - 支援的瀏覽器會直接顯示「安裝 App」；iPhone 會提供 Safari 加入主畫面指引。
 
@@ -82,12 +86,14 @@ PitchFrame 的價值不是自動打分，而是讓「觀察 → 建議 → 練�
 - 相機角度、遮擋、衣物、影格率與模糊都會改變估計結果。
 - 門檻用來穩定視覺呈現，不是適用所有年齡的「標準答案」。
 - 髖肩分離不是越大越好，也不能單獨代表球速、效率或受傷風險。
+- 少棒動力傳遞研究通常使用多機位 3D 動作捕捉與測力板；PitchFrame 不宣稱從手機影片量到關節功率、能量流或精準旋轉速度。
 - 本工具不能診斷傷害或預測受傷。若有疼痛、疲勞、速度／準度突然下降或動作控制改變，應停止投球並尋求教練與醫療專業意見。
 
 參考閱讀：
 
 - [Baseball Pitching Biomechanics in Relation to Injury Risk and Performance](https://pmc.ncbi.nlm.nih.gov/articles/PMC3445126/)
 - [Hip Flexibility and Pitching Biomechanics in Adolescent Baseball Pitchers](https://pmc.ncbi.nlm.nih.gov/articles/PMC9528701/)
+- [Lower Body Energy Generation, Absorption, and Transfer in Youth Baseball Pitchers](https://pmc.ncbi.nlm.nih.gov/articles/PMC9532595/)
 - [Kinematic Parameters Predictive of Pitch Velocity: Systematic Review](https://pmc.ncbi.nlm.nih.gov/articles/PMC10687953/)
 - [ASMI Position Statement for Adolescent Baseball Pitchers](https://asmi.org/position-statement-for-adolescent-baseball-pitchers/)
 
@@ -121,11 +127,10 @@ node tests/events.test.cjs
 
 ## Roadmap
 
-- 同一球員、同一機位的兩次影片比較。
-- 關鍵事件卡：前腳落地、最大肩外旋代理點、出手、跟隨動作。
-- 可選擇慣用手、年齡層與拍攝視角，讓 AI 分析包更完整。
-- 在不離開裝置的前提下，產生多次投球的一致性報告。
-- 建立可重現的測試影片與事件標記資料集，持續驗證自動偵測。
+- 用 3–5 位家長與教練完成真實影片任務測試，記錄完成率、卡點與分享內容是否可採用。
+- 建立取得同意、可重現的測試影片與人工事件標記資料集，量化落地／出手候選點誤差。
+- 持續做 `pitchframe-analysis-package-v2` 向後相容性測試，避免外部 AI 整合因更新中斷。
+- 只有在使用測試證明需要時，才加入同機位雙影片並排；不以增加功能數為目標。
 
 歡迎用 [Issues](https://github.com/bddgtw-tw/pitchframe-baseball-lab/issues) 提供可重現案例。請勿上傳含兒童身分資訊或未取得同意的影片；描述瀏覽器、手機型號、拍攝方向、預期與實際結果即可。
 
