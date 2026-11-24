@@ -27,4 +27,14 @@
 - Service Worker 版本已更新，公開站能取得新版資源。
 - PR 說明列出驗證環境與實際結果。
 
-專案整體授權目前尚未宣告。提交 PR 前，請確認你有權提供該程式碼與素材；第三方元件仍依各自授權使用。
+## 更新介面 CSS
+
+公開站使用預先編譯的 `pitchframe.css`，不要把 Tailwind 瀏覽器端編譯器加回主畫面。修改 HTML class 後執行：
+
+```bash
+npx --yes tailwindcss@3.4.17 -i tailwind.source.css -o pitchframe.css --minify --content index.html
+```
+
+提交前確認首次開啟不會下載 Pose 模型；模型應等到使用者選擇影片後才載入。
+
+專案程式碼採 MIT License；第三方模型與元件仍依各自授權使用。提交 PR 前請確認你有權提供程式碼與素材。

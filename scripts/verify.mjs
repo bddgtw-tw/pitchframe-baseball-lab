@@ -40,6 +40,12 @@ for (const simplificationBehavior of ['sessionSetupComplete()', 'sessionSetup.op
 for (const sharingBehavior of ['免費免登入：用手機逐格確認前腳落地與出手', "btnShareApp.textContent = '分享工具'"]) {
   if (!html.includes(sharingBehavior)) fail(`Parent sharing behavior is missing: ${sharingBehavior}`);
 }
+for (const performanceBehavior of ['href="./pitchframe.css"', '選擇影片後才載入本站 AI 模型', 'if (!isPoseModelReady && !poseInitPromise) initMediaPipe()']) {
+  if (!html.includes(performanceBehavior)) fail(`Deferred-loading behavior is missing: ${performanceBehavior}`);
+}
+for (const blockingBehavior of ['src="./tailwind.js"', "addEventListener('DOMContentLoaded', initMediaPipe)", 'user-scalable=no']) {
+  if (html.includes(blockingBehavior)) fail(`Blocking or inaccessible startup behavior remains: ${blockingBehavior}`);
+}
 for (const scienceGuard of ['不能據此要求孩子增加扭轉', '不得解讀為越大越好', 'PMC9532595', 'pitchframe-analysis-package-v2', 'validatedPhysicalMeasurement: false']) {
   if (!html.includes(scienceGuard)) fail(`Sports-science safeguard is missing: ${scienceGuard}`);
 }
