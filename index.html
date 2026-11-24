@@ -35,6 +35,7 @@
   <title>PitchFrame｜免費少棒投球逐格分析・影片不上傳</title>
   <!-- Bundled Tailwind CSS 3.4.17 -->
   <script src="./tailwind.js"></script>
+  <script src="./pitchframe_events.js"></script>
   <script>
 /* Local-only, bounded ISO-BMFF sample timeline. Unsupported layouts return null.
  * No media payload is read. Indexes presentation samples, not guessed FPS.
@@ -2155,48 +2156,15 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     // 前腳落地：「最先」大幅水平移動的腳踝就是跨步腳（後腳在出手後的跟進也會大幅移動，
     // 所以不能用移動總量判斷），它快速前移後停下的第一格就是落地；出手：之後投球手腕最快的那一格
     function detectEvents(keys) {
-      const W = video.videoWidth || 1, H = video.videoHeight || 1;
-      const series = idx => keys.map(k => { const lm = poseCache.get(k); const p = lm && lm[idx];
-        return p && credibleBodyPoint(p) ? { x: p.x * W, y: p.y * H } : null; });
-      const smoothX = arr => arr.map((p, i) => { const win = arr.slice(Math.max(0, i - 1), i + 2).filter(Boolean);
-        return p && win.length ? win.reduce((a, q) => a + q.x, 0) / win.length : null; });
-      const velOf = xs => xs.map((x, i) => (i && x !== null && xs[i - 1] !== null) ? Math.abs(x - xs[i - 1]) : 0);
-      const sides = [27, 28].map(idx => { const xs = smoothX(series(idx)); return { idx, xs, vel: velOf(xs) }; });
-      const globalPeak = Math.max(...sides.map(sd => Math.max(0, ...sd.vel)));
-      if (!(globalPeak > Math.max(W, H) * 0.006)) return { foot: null, release: null };
-      const moveTh = globalPeak * 0.5;
-      sides.forEach(sd => { sd.onset = sd.vel.findIndex(v => v >= moveTh); });
-      const moving = sides.filter(sd => sd.onset >= 0).sort((p, q) => p.onset - q.onset);
-      if (!moving.length) return { foot: null, release: null };
-      const stride = moving[0];
-      // 跨步這一段的峰值：從起動往後，直到速度掉下來
-      let peak = stride.onset;
-      for (let i = stride.onset; i < stride.vel.length && stride.vel[i] >= moveTh * 0.4; i++) if (stride.vel[i] > stride.vel[peak]) peak = i;
-      let foot = null;
-      for (let i = peak + 1; i < stride.vel.length - 1; i++) {
-        if (stride.xs[i] !== null && stride.vel[i] < stride.vel[peak] * 0.2 && stride.vel[i + 1] < stride.vel[peak] * 0.2) { foot = i; break; }
-      }
-      let release = null;
-      if (foot !== null) {
-        // 出手：落地後 0.5 秒內，投球手腕伸到「最靠近目標方向」的那一格（目標方向＝跨步方向）。
-        // 揮臂那幾格常常糊掉、可信度低，所以這裡只要求座標存在、可信度 ≥ 0.2。
-        // 明確設定的慣用手優先；沒設定時才從跨步腳推估。
-        const wristIdx = analysisContext.handedness === 'right' ? 16
-          : analysisContext.handedness === 'left' ? 15
-          : stride.idx === 27 ? 16 : 15;
-        const startX = stride.xs[stride.onset], footX = stride.xs[foot];
-        const dir = (footX !== null && startX !== null && footX < startX) ? -1 : 1;
-        const fps = sourceFrameIndex && sourceFrameIndex.fps ? sourceFrameIndex.fps : 30;
-        const end = Math.min(keys.length - 1, foot + Math.round(fps * 0.5));
-        let best = -Infinity;
-        for (let i = foot + 1; i <= end; i++) {
-          const lm = poseCache.get(keys[i]); const p = lm && lm[wristIdx];
-          if (!p || !Number.isFinite(p.x) || !(p.visibility >= 0.2)) continue;
-          const reach = dir * p.x * W;
-          if (reach > best) { best = reach; release = i; }
-        }
-      }
-      return { foot: foot === null ? null : keys[foot], release: release === null ? null : keys[release] };
+      return PitchFrameEvents.detectPitchEvents({
+        keys,
+        poseByKey: poseCache,
+        width: video.videoWidth || 1,
+        height: video.videoHeight || 1,
+        fps: sourceFrameIndex && sourceFrameIndex.fps ? sourceFrameIndex.fps : 30,
+        handedness: analysisContext.handedness,
+        credible: credibleBodyPoint
+      });
     }
 
     function getSeparation() {
@@ -2218,7 +2186,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         const near = [foot - 1, foot, foot + 1].map(k => level.get(k)).filter(v => v !== null && v !== undefined);
         footLevel = near.length ? median(near) : null;
       }
-      sepCache = { stamp, keys, level, signed, foot, release: ev.release, footLevel, manual: manualFoot !== null };
+      sepCache = { stamp, keys, level, signed, foot, release: ev.release, footLevel, manual: manualFoot !== null,
+        strideAnkleIndex: ev.strideAnkleIndex ?? null, wristIndex: ev.wristIndex ?? null, wristSource: ev.wristSource ?? null, eventReason: ev.reason || null };
       drawSeparationStrip();
       updateSeparationPanel();
       return sepCache;
@@ -3478,6 +3447,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           footStrikeSeconds: sep ? eventTime(sep.foot) : null,
           footStrikeSource: sep && sep.foot !== null ? (sep.manual ? 'manual' : 'automatic-estimate') : null,
           ballReleaseSeconds: sep ? eventTime(sep.release) : null,
+          eventDetectionReason: sep ? sep.eventReason : null,
+          throwingWristIndex: sep ? sep.wristIndex : null,
+          throwingWristSource: sep ? sep.wristSource : null,
           separationTrend: separationObservation
         },
         limitations: [

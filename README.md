@@ -96,6 +96,7 @@ python -m http.server 8080
 
 ```bash
 node scripts/verify.mjs
+node tests/events.test.cjs
 ```
 
 - 首次載入與離線重開可用。

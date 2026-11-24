@@ -22,3 +22,5 @@ jobs:
           node-version: 22
       - name: Verify static PWA
         run: node scripts/verify.mjs
+      - name: Test pitching event detection
+        run: node tests/events.test.cjs

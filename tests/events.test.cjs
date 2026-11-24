@@ -1,0 +1,48 @@
+const assert = require('node:assert/strict');
+const { detectPitchEvents, throwingWristIndex } = require('../pitchframe_events.js');
+
+function buildPoseMap({ strideIndex, strideX, wristIndex, wristX }) {
+  const keys = strideX.map((_, index) => index);
+  const map = new Map();
+  for (const key of keys) {
+    const landmarks = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 1 }));
+    landmarks[27].x = strideIndex === 27 ? strideX[key] : 0.25;
+    landmarks[28].x = strideIndex === 28 ? strideX[key] : 0.75;
+    landmarks[wristIndex].x = wristX[key];
+    map.set(key, landmarks);
+  }
+  return { keys, map };
+}
+
+const rightStride = [0.20, 0.20, 0.21, 0.28, 0.45, 0.60, 0.62, 0.621, 0.621, 0.621, 0.621, 0.621, 0.621, 0.621];
+const rightWrist = [0.35, 0.35, 0.35, 0.35, 0.36, 0.38, 0.42, 0.48, 0.55, 0.70, 0.86, 0.82, 0.78, 0.74];
+const right = buildPoseMap({ strideIndex: 27, strideX: rightStride, wristIndex: 16, wristX: rightWrist });
+const rightResult = detectPitchEvents({ keys: right.keys, poseByKey: right.map, width: 1000, height: 700, fps: 30, handedness: 'right' });
+assert.equal(rightResult.foot, 7, 'right-handed synthetic foot strike');
+assert.equal(rightResult.release, 10, 'right-handed synthetic release');
+assert.equal(rightResult.strideAnkleIndex, 27);
+assert.equal(rightResult.wristIndex, 16);
+assert.equal(rightResult.wristSource, 'configured-right');
+assert.equal(rightResult.reason, 'ok');
+
+const leftStride = rightStride.map(value => 1 - value);
+const leftWrist = rightWrist.map(value => 1 - value);
+const left = buildPoseMap({ strideIndex: 28, strideX: leftStride, wristIndex: 15, wristX: leftWrist });
+const leftResult = detectPitchEvents({ keys: left.keys, poseByKey: left.map, width: 1000, height: 700, fps: 30, handedness: 'left' });
+assert.equal(leftResult.foot, 7, 'left-handed synthetic foot strike');
+assert.equal(leftResult.release, 10, 'left-handed synthetic release');
+assert.equal(leftResult.strideAnkleIndex, 28);
+assert.equal(leftResult.wristIndex, 15);
+assert.equal(leftResult.wristSource, 'configured-left');
+
+assert.deepEqual(throwingWristIndex(27, 'unknown'), { index: 16, source: 'inferred-from-left-stride-foot' });
+assert.deepEqual(throwingWristIndex(28, 'unknown'), { index: 15, source: 'inferred-from-right-stride-foot' });
+assert.deepEqual(throwingWristIndex(28, 'right'), { index: 16, source: 'configured-right' });
+
+const still = buildPoseMap({ strideIndex: 27, strideX: Array(14).fill(0.2), wristIndex: 16, wristX: Array(14).fill(0.4) });
+const stillResult = detectPitchEvents({ keys: still.keys, poseByKey: still.map, width: 1000, height: 700, fps: 30 });
+assert.equal(stillResult.foot, null);
+assert.equal(stillResult.release, null);
+assert.equal(stillResult.reason, 'insufficient-stride-motion');
+
+console.log('PitchFrame event tests passed: right throw, left throw, explicit-hand override, and insufficient motion.');
