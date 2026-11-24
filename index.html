@@ -476,11 +476,32 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         <section id="sepPanel" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col gap-2.5 shadow-lg" aria-label="髖肩分離">
           <h2 class="operation-heading">髖肩分離（AI 推測）</h2>
           <div id="sepVerdict" role="status" class="rounded-xl border border-slate-700 p-2.5 text-sm leading-relaxed">等骨架分析完成…</div>
+          <div id="sepReport" class="hidden text-xs text-slate-300 leading-relaxed rounded-xl bg-slate-950/60 border border-slate-800 p-2.5"></div>
           <div class="grid grid-cols-3 gap-1.5">
             <button id="btnJumpFoot" class="bg-slate-100 text-slate-950 text-xs font-bold px-2 py-2.5 rounded-lg active:scale-95 transition">跳到前腳落地</button>
             <button id="btnMarkFoot" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2 py-2.5 rounded-lg border border-slate-700 active:scale-95 transition">這格設為落地</button>
             <button id="btnJumpRelease" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2 py-2.5 rounded-lg border border-slate-700 active:scale-95 transition">跳到出手</button>
           </div>
+          <div class="grid grid-cols-2 gap-1.5 text-xs">
+            <label class="flex flex-col gap-1 text-slate-400">拍攝角度
+              <select id="sepAngle" class="bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-slate-100">
+                <option value="側面">側面</option>
+                <option value="正前方（捕手方向）">正前方（捕手方向）</option>
+                <option value="正後方（中外野方向）">正後方（中外野方向）</option>
+                <option value="斜角">斜角</option>
+              </select>
+            </label>
+            <label class="flex flex-col gap-1 text-slate-400">孩子年齡（選填）
+              <input id="sepAge" type="number" min="5" max="18" inputmode="numeric" placeholder="例如 8" class="bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-slate-100">
+            </label>
+          </div>
+          <button id="btnExportPack" class="bg-lime-400 hover:bg-lime-300 text-slate-950 text-sm font-bold px-3 py-3 rounded-xl active:scale-95 transition">匯出分析包（關鍵格圖＋AI 提示詞）</button>
+          <p class="text-[11px] text-slate-400 leading-relaxed -mt-1">分析包在這台裝置上產生，不會上傳。若把圖或影片交給 ChatGPT、Claude、Gemini 等外部 AI，就等於上傳給那家公司。</p>
+          <details id="sepPromptBox" class="text-xs text-slate-300">
+            <summary class="cursor-pointer text-slate-200 font-semibold">外部 AI 提示詞（可自己複製）</summary>
+            <textarea id="sepPrompt" readonly rows="10" class="mt-2 w-full bg-slate-950 border border-slate-700 rounded-lg p-2 text-[11px] leading-relaxed text-slate-200"></textarea>
+            <button id="btnCopyPrompt" class="mt-1.5 w-full bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs px-2 py-2 rounded-lg border border-slate-700">複製提示詞</button>
+          </details>
           <details class="text-xs text-slate-300 leading-relaxed">
             <summary class="cursor-pointer text-slate-200 font-semibold">這在看什麼？（運動科學來源）</summary>
             <ul class="list-disc pl-5 mt-2 flex flex-col gap-1.5">
@@ -1966,7 +1987,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const SEP_LOW = [255, 255, 255], SEP_HIGH = [239, 68, 68], SEP_ALPHA = 0.85; // 白 → 紅，透明度固定；以相乘疊在影片上，白色＝不變，紅色＝染紅但球員仍清楚
     let separationEnabled = true;
     try { separationEnabled = localStorage.getItem('pf-separation') !== '0'; } catch (_) {}
-    let sepCache = null, manualFoot = null;
+    let sepCache = null, manualFoot = null, sepReportStamp = '';
     const btnSeparation = document.getElementById('btnSeparation');
     const separationStatusText = document.getElementById('separationStatusText');
     const sepPanel = document.getElementById('sepPanel');
@@ -2050,7 +2071,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           if (reach > best) { best = reach; release = i; }
         }
       }
-      return { foot: foot === null ? null : keys[foot], release: release === null ? null : keys[release] };
+      return { foot: foot === null ? null : keys[foot], release: release === null ? null : keys[release], strideIdx: stride.idx };
     }
 
     function getSeparation() {
@@ -2072,7 +2093,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         const near = [foot - 1, foot, foot + 1].map(k => level.get(k)).filter(v => v !== null && v !== undefined);
         footLevel = near.length ? median(near) : null;
       }
-      sepCache = { stamp, keys, level, signed, foot, release: ev.release, footLevel, manual: manualFoot !== null };
+      sepCache = { stamp, keys, level, signed, foot, release: ev.release, footLevel, manual: manualFoot !== null,
+        aiFoot: ev.foot, strideIdx: ev.strideIdx || null };
       drawSeparationStrip();
       updateSeparationPanel();
       return sepCache;
@@ -2094,6 +2116,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (done && sepCache.foot !== null) html += `<br><span class="text-slate-500 text-[11px]">落地點：${sepCache.manual ? '手動標記' : 'AI 自動判斷（不對可手動改）'}</span>`;
       sepVerdict.innerHTML = html;
       sepVerdict.style.borderColor = border;
+      if (sepReportStamp !== sepCache.stamp + '|' + sepAngle.value + '|' + sepAge.value) { sepReportStamp = sepCache.stamp + '|' + sepAngle.value + '|' + sepAge.value; renderSepReport(); }
     }
 
     function drawSeparationStrip() {
@@ -2220,6 +2243,238 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       jumpToKey(Math.max(0, Math.min(lastKey, Math.floor((e.clientX - rect.left) / Math.max(1, rect.width) * (lastKey + 1)))));
     });
     window.addEventListener('resize', () => drawSeparationStrip());
+
+    /* ==========================================================================
+       髖肩分離：本機簡易報告、外部 AI 提示詞、分析包（關鍵格圖）
+       全部在這台裝置上產生；不打分數、不顯示扭轉度數。
+       ========================================================================== */
+    const sepReport = document.getElementById('sepReport');
+    const sepAngle = document.getElementById('sepAngle');
+    const sepAge = document.getElementById('sepAge');
+    const sepPrompt = document.getElementById('sepPrompt');
+    const sepPromptBox = document.getElementById('sepPromptBox');
+    const btnExportPack = document.getElementById('btnExportPack');
+    try {
+      const a = localStorage.getItem('pf-sep-angle'); if (a) sepAngle.value = a;
+      const g = localStorage.getItem('pf-sep-age'); if (g) sepAge.value = g;
+    } catch (_) {}
+    sepAngle.addEventListener('change', () => { try { localStorage.setItem('pf-sep-angle', sepAngle.value); } catch (_) {} renderSepReport(); });
+    sepAge.addEventListener('input', () => { try { localStorage.setItem('pf-sep-age', sepAge.value); } catch (_) {} renderSepReport(); });
+
+    function sepFps() { return sourceFrameIndex && sourceFrameIndex.fps ? sourceFrameIndex.fps : (1 / fallbackFrameDuration); }
+    function sepFrameText(key) { return `第 ${key} 格（${sepKeyTime(key).toFixed(2)} 秒）`; }
+    function sepRuns(sep, test) {
+      const runs = []; let start = null, prev = null;
+      for (const k of sep.keys) {
+        const v = sep.level.get(k); const hit = v !== null && v !== undefined && test(v);
+        if (hit && start === null) start = k;
+        if (!hit && start !== null) { runs.push([start, prev]); start = null; }
+        prev = k;
+      }
+      if (start !== null) runs.push([start, prev]);
+      return runs;
+    }
+    function sepVerdictText(sep) {
+      if (sep.foot === null) return '找不到前腳落地';
+      if (sep.footLevel === null) return '落地這幾格判斷不了（骨架不清楚）';
+      return sep.footLevel >= 0.5 ? '前腳落地時：髖已轉開、肩還留在後面（有做到髖肩分離）'
+        : '前腳落地時：髖肩幾乎沒有拉開（髖還沒開，或肩已跟著開）';
+    }
+    // 本機簡易報告的資料（報告、提示詞、分析包共用同一份）
+    function buildSepSummary() {
+      const sep = getSeparation();
+      if (!sep || !(trackComplete() || !hasTargetChoice())) return null;
+      const fps = sepFps();
+      const hand = sep.strideIdx === 28 ? '左投' : sep.strideIdx === 27 ? '右投' : '無法判斷';
+      const red = sepRuns(sep, v => v >= 0.5);
+      const firstRed = red.length ? red[0][0] : null;
+      let timing = '整段都沒有明顯的髖肩分離';
+      if (firstRed !== null && sep.foot !== null) {
+        const d = firstRed - sep.foot;
+        timing = d <= 0 ? `落地前 ${-d} 格（約 ${(-d / fps).toFixed(2)} 秒）就出現` : `落地後 ${d} 格（約 ${(d / fps).toFixed(2)} 秒）才出現`;
+      }
+      const warnings = [];
+      if (sep.manual && sep.aiFoot !== null && Math.abs(sep.foot - sep.aiFoot) > 4)
+        warnings.push(`手動落地點和 AI 判斷（第 ${sep.aiFoot} 格）差了 ${Math.abs(sep.foot - sep.aiFoot)} 格，請確認是前腳剛踩到地的那一格。`);
+      if (sep.foot !== null && sep.release !== null && sep.foot >= sep.release)
+        warnings.push('落地點和出手是同一格或在出手之後，可能標錯了。');
+      const limits = ['扭轉深度由 AI 從單一畫面推測，只看顏色與時機，不代表精準角度。'];
+      if (fps < 100) limits.push(`影片每秒約 ${Math.round(fps)} 格，落地前後的轉動只佔幾格；建議改用慢動作 240fps 拍攝。`);
+      if (sepAngle.value === '側面') limits.push('側拍時髖與肩接近正對或背對鏡頭，深度推測較不穩定；正前方或正後方拍攝較準。');
+      return { sep, fps, hand, red, timing, warnings, limits,
+        verdict: sepVerdictText(sep), angle: sepAngle.value, age: sepAge.value ? Number(sepAge.value) : null };
+    }
+    function escapeHtml(t) { return String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]); }
+    function renderSepReport() {
+      const r = buildSepSummary();
+      sepReport.classList.toggle('hidden', !r);
+      btnExportPack.disabled = !(r && r.sep.foot !== null);
+      btnExportPack.classList.toggle('opacity-50', btnExportPack.disabled);
+      if (!r) { sepPrompt.value = ''; return; }
+      const s = r.sep;
+      const rows = [
+        ['投球手', `${r.hand}（依跨步腳推測）`],
+        ['前腳落地', s.foot === null ? '找不到' : `${sepFrameText(s.foot)}・${s.manual ? '手動標記' : 'AI 判斷'}`],
+        ['出手', s.release === null ? '找不到' : `${sepFrameText(s.release)}・AI 推測`],
+        ['紅色（扭開）', r.red.length ? r.red.map(([a, b]) => a === b ? `第 ${a} 格` : `第 ${a}–${b} 格`).join('、') + `；${r.timing}` : r.timing],
+      ];
+      sepReport.innerHTML = rows.map(([k, v]) => `<div class="flex gap-2"><span class="text-slate-500 w-20 shrink-0">${k}</span><span>${escapeHtml(v)}</span></div>`).join('')
+        + (s.manual ? '<button id="btnResetFoot" class="mt-1.5 text-lime-300 underline">落地點改回 AI 判斷</button>' : '')
+        + r.warnings.map(w => `<div class="mt-1.5 text-amber-300">⚠ ${escapeHtml(w)}</div>`).join('')
+        + `<div class="mt-1.5 text-slate-500">${r.limits.map(escapeHtml).join('<br>')}</div>`;
+      const reset = document.getElementById('btnResetFoot');
+      if (reset) reset.addEventListener('click', () => { manualFoot = null; sepCache = null; renderStage(); });
+      sepPrompt.value = buildSepPrompt(r);
+    }
+    function buildSepPrompt(r) {
+      const s = r.sep;
+      const strip = sepRuns(s, v => true).length ? [
+        ...sepRuns(s, v => v >= 0.5).map(([a, b]) => `第 ${a}–${b} 格：明顯扭開`),
+        ...sepRuns(s, v => v > 0 && v < 0.5).map(([a, b]) => `第 ${a}–${b} 格：開始扭開`),
+      ] : [];
+      return [
+        `我是少棒家長，請幫我看孩子的投球動作。附上 PitchFrame 匯出的分析包圖片：三格依序是「落地前 3 格、前腳落地、出手」，軀幹染紅代表髖肩扭開。`,
+        `・孩子：${r.age ? r.age + ' 歲，' : ''}${r.hand}；拍攝角度：${r.angle}；影片約 ${Math.round(r.fps)} fps。`,
+        `・前腳落地：${s.foot === null ? '找不到' : sepFrameText(s.foot) + (s.manual ? '，家長手動確認' : '，AI 判斷')}；出手：${s.release === null ? '找不到' : sepFrameText(s.release) + '，AI 推測'}。`,
+        `・PitchFrame 髖肩分離推測：${strip.length ? strip.join('；') : '整段都沒有明顯扭開'}；${r.timing}。`,
+        `・本機判讀：${r.verdict}。`,
+        `・限制：${r.limits.join(' ')}`,
+        ``,
+        `請依 Driveline 與 ASMI（美國運動醫學研究所）的觀點回答：`,
+        `1. 前腳落地那一格，髖（皮帶扣）和肩（胸口、背號）各自朝向哪裡？有沒有做到「髖轉開、軀幹保持關閉」？`,
+        `2. 有沒有看到骨盆先轉、上半身後轉的順序？`,
+        `3. 給 1–2 個適合${r.age ? ' ' + r.age + ' 歲' : '這個年紀'}孩子的練習重點，用家長聽得懂的話說。`,
+        `請不要做傷害或醫療判斷，也不要打分數；圖片看不出來的地方請直接說看不出來。少棒落地時的軀幹分離本來就會隨年齡增加，請以孩子自己前後比較的角度回答。`,
+      ].join('\n');
+    }
+    async function copyText(text) {
+      try { await navigator.clipboard.writeText(text); return true; } catch (_) {}
+      try { sepPrompt.value = text; sepPromptBox.open = true; sepPrompt.focus(); sepPrompt.select(); return document.execCommand('copy'); } catch (_) { return false; }
+    }
+    document.getElementById('btnCopyPrompt').addEventListener('click', async () => {
+      const ok = await copyText(sepPrompt.value);
+      showPill(ok ? '提示詞已複製' : '請長按文字框手動複製'); setTimeout(() => showPill(''), 1800);
+    });
+
+    // 分析包圖：三個關鍵格（各自帶骨架與髖肩染色）＋熱度帶＋報告＋來源
+    const PACK_FONT = '"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif';
+    async function renderPackFrame(key, fw, fh) {
+      await seekAnalysisVideo(sepKeyTime(key));
+      const fc = document.createElement('canvas'); fc.width = fw; fc.height = fh;
+      const fx = fc.getContext('2d');
+      fx.drawImage(analysisVideo, 0, 0, fw, fh);
+      const lm = poseCache.get(key), sep = sepCache;
+      if (lm && sep) {
+        const t = sep.level.get(key);
+        const pts = [11, 12, 24, 23].map(i => lm[i]);
+        if (t !== null && t !== undefined && pts.every(p => p && credibleBodyPoint(p))) {
+          const tc = document.createElement('canvas'); tc.width = fw; tc.height = fh;
+          drawTwistFill(tc.getContext('2d'), pts.map(p => mapVideoToCanvas(p.x, p.y, fc)), t);
+          fx.save(); fx.globalCompositeOperation = 'multiply'; fx.drawImage(tc, 0, 0); fx.restore();
+        }
+        drawSimplifiedBaseballSkeleton(fx, lm, false);
+      }
+      return fc;
+    }
+    function wrapLines(ctx, text, maxW) {
+      const out = []; let line = '';
+      for (const ch of text) { if (ctx.measureText(line + ch).width > maxW && line) { out.push(line); line = ch; } else line += ch; }
+      if (line) out.push(line); return out;
+    }
+    async function exportAnalysisPack() {
+      const r = buildSepSummary();
+      if (!r || r.sep.foot === null) { alert('請先等骨架分析完成，並確認前腳落地那一格。'); return; }
+      if (analysisActive()) { alert('骨架還在分析中，請完成後再匯出。'); return; }
+      const promptText = buildSepPrompt(r);
+      const copied = await copyText(promptText); // 先複製（需要在點擊當下）
+      btnExportPack.disabled = true; const label = btnExportPack.textContent; btnExportPack.textContent = '產生分析包中…';
+      try {
+        if (analysisVideo.getAttribute('src') !== currentVideoObjectUrl) {
+          const loaded = waitForMediaEvent(analysisVideo, 'loadeddata', 20000, '分析用影片載入逾時');
+          analysisVideo.src = currentVideoObjectUrl; analysisVideo.load(); await loaded;
+        }
+        const s = r.sep, first = s.keys[0];
+        const shots = [
+          { key: Math.max(first, s.foot - 3), title: '落地前 3 格' },
+          { key: s.foot, title: s.manual ? '前腳落地（手動）' : '前腳落地' },
+          ...(s.release !== null ? [{ key: s.release, title: '出手（推測）' }] : []),
+        ];
+        const vw = video.videoWidth, vh = video.videoHeight;
+        const fw = Math.min(640, vw), fh = Math.round(fw * vh / vw), pad = 24, cols = shots.length;
+        const W = pad + cols * (fw + pad);
+        const frames = [];
+        for (const sh of shots) frames.push(await renderPackFrame(sh.key, fw, fh));
+        const meas = document.createElement('canvas').getContext('2d');
+        meas.font = `20px ${PACK_FONT}`;
+        const textW = W - pad * 2;
+        const body = [
+          `投球手：${r.hand}　拍攝角度：${r.angle}${r.age ? '　年齡：' + r.age + ' 歲' : ''}　約 ${Math.round(r.fps)} fps`,
+          `前腳落地：${sepFrameText(s.foot)}（${s.manual ? '手動標記' : 'AI 判斷'}）　出手：${s.release === null ? '找不到' : sepFrameText(s.release)}`,
+          `判讀：${r.verdict}`,
+          `紅色（扭開）出現：${r.timing}`,
+          ...r.warnings.map(w => '⚠ ' + w),
+          ...r.limits.map(l => '・' + l),
+        ].flatMap(t => wrapLines(meas, t, textW));
+        const headerH = 76, labelH = 36, stripH = 56, lineH = 30;
+        const H = headerH + labelH + fh + pad + stripH + pad + body.length * lineH + 70;
+        const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+        const c = cv.getContext('2d');
+        c.fillStyle = '#0b1220'; c.fillRect(0, 0, W, H);
+        c.fillStyle = '#f8fafc'; c.font = `bold 28px ${PACK_FONT}`; c.textBaseline = 'top';
+        c.fillText('PitchFrame 髖肩分離分析包', pad, 22);
+        c.fillStyle = '#94a3b8'; c.font = `16px ${PACK_FONT}`;
+        const now = new Date();
+        c.fillText(`${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()}　軀幹染紅＝髖肩扭開（AI 推測，僅供參考）`, pad + 400, 30);
+        shots.forEach((sh, i) => {
+          const x = pad + i * (fw + pad), y = headerH + labelH;
+          c.fillStyle = sh.key === s.foot ? '#ef4444' : '#e2e8f0'; c.font = `bold 20px ${PACK_FONT}`;
+          c.fillText(`${sh.title}・${sepFrameText(sh.key)}`, x, headerH + 4);
+          c.drawImage(frames[i], x, y, fw, fh);
+          c.strokeStyle = sh.key === s.foot ? '#ef4444' : '#334155'; c.lineWidth = 3; c.strokeRect(x, y, fw, fh);
+        });
+        // 熱度帶
+        const sy = headerH + labelH + fh + pad, sw = W - pad * 2, lastKey = s.keys[s.keys.length - 1] || 1;
+        c.fillStyle = '#94a3b8'; c.font = `16px ${PACK_FONT}`; c.fillText('分離熱度帶（白＝沒拉開，紅＝扭開；圓點＝前腳落地，虛線＝出手）', pad, sy);
+        const by = sy + 24, bh = 20;
+        c.fillStyle = 'rgba(226,232,240,0.12)'; c.fillRect(pad, by, sw, bh);
+        for (const k of s.keys) { const t = s.level.get(k); if (t === null || t === undefined) continue;
+          c.fillStyle = sepColor(t, 0.85); c.fillRect(pad + k / (lastKey + 1) * sw, by, Math.ceil(sw / (lastKey + 1)), bh); }
+        if (s.release !== null) { const x = pad + (s.release + 0.5) / (lastKey + 1) * sw;
+          c.strokeStyle = '#94a3b8'; c.lineWidth = 2; c.setLineDash([4, 4]); c.beginPath(); c.moveTo(x, by - 4); c.lineTo(x, by + bh + 4); c.stroke(); c.setLineDash([]); }
+        { const x = pad + (s.foot + 0.5) / (lastKey + 1) * sw;
+          c.fillStyle = '#0b1220'; c.strokeStyle = '#f8fafc'; c.lineWidth = 3; c.beginPath(); c.arc(x, by + bh / 2, 8, 0, Math.PI * 2); c.fill(); c.stroke(); }
+        // 報告
+        let ty = sy + stripH + pad;
+        c.font = `20px ${PACK_FONT}`;
+        body.forEach(line => { c.fillStyle = line.startsWith('⚠') ? '#fcd34d' : line.startsWith('・') ? '#94a3b8' : '#e2e8f0'; c.fillText(line, pad, ty); ty += lineH; });
+        c.fillStyle = '#64748b'; c.font = `14px ${PACK_FONT}`;
+        c.fillText('觀念出處：Driveline（落地時髖轉開、軀幹保持關閉；骨盆先、軀幹後的時機比度數重要）、ASMI 臨床指南與少棒 7 年追蹤研究。', pad, ty + 12);
+        c.fillText('本圖在使用者裝置上產生，不打分數、不做醫療判斷；請跟孩子自己前後的影片比較。', pad, ty + 34);
+        const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+        const stamp = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}_${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}`;
+        const fileName = `PitchFrame_髖肩分離_${stamp}.png`;
+        let shared = false;
+        try {
+          const file = new File([blob], fileName, { type: 'image/png' });
+          if (isMobileDevice && navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], text: promptText }); shared = true;
+          }
+        } catch (_) {}
+        if (!shared) {
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a'); a.href = url; a.download = fileName; document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 5000);
+        }
+        showPill(copied ? '分析包已產生，提示詞已複製' : '分析包已產生；提示詞請在下方手動複製');
+        if (!copied) sepPromptBox.open = true;
+        setTimeout(() => showPill(''), 2500);
+      } catch (err) {
+        alert('分析包產生失敗：' + (err && err.message ? err.message : err));
+      } finally {
+        btnExportPack.disabled = false; btnExportPack.textContent = label;
+      }
+    }
+    btnExportPack.addEventListener('click', exportAnalysisPack);
 
     function renderStage() {
       if (!mainCanvas.width || !mainCanvas.height) return;
