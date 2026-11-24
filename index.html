@@ -340,6 +340,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       <!-- Transparent Canvas (simplified baseball skeleton + dynamic angle badges) -->
       <canvas id="mainCanvas" class="absolute inset-0 w-full h-full object-contain pointer-events-none z-10"></canvas>
 
+      <div id="sepBadge" class="hidden absolute left-3 top-3 pointer-events-none rounded-xl px-3 py-2 text-sm font-bold" style="z-index:25;background:rgba(2,6,23,.88);border:1px solid #a3e635;color:#f8fafc"></div>
+
       <!-- Annotation Canvas (user drawing lines, arrows, circles, notes) -->
       <canvas id="drawCanvas" class="absolute inset-0 w-full h-full object-contain z-20 pointer-events-none"></canvas>
 
@@ -396,6 +398,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         </div>
         <span id="timeDuration" class="text-xs font-mono text-slate-400 w-12">00:00</span>
       </div>
+      <div id="sepStripRow" class="hidden flex items-center gap-3" style="margin-top:-8px">
+        <span class="text-[11px] text-slate-400 w-12 text-right">分離</span>
+        <canvas id="sepStrip" class="flex-1" style="height:18px;cursor:pointer" aria-label="髖肩分離熱度帶：白色是沒拉開，綠色是髖已轉開、肩還留在後面；點一下跳到那一格"></canvas>
+        <span class="w-12"></span>
+      </div>
 
       <!-- Primary Control Buttons Bar -->
       <div id="playbackActions" class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800">
@@ -443,6 +450,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
             <span>〰</span>
             <span id="smoothStatusText">補間: 開</span>
           </button>
+          <button id="btnSeparation" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-400 text-xs px-2.5 py-2 rounded-lg border border-slate-700 transition font-medium flex items-center gap-1" title="髖肩分離：兩肩與兩髖四點連成平面，扭開時變綠">
+            <span>⟲</span>
+            <span id="separationStatusText">髖肩分離: 開</span>
+          </button>
           <button id="btnToggleSkeleton" class="bg-lime-400/20 text-lime-300 border border-lime-400/30 text-xs font-semibold px-3 py-2 rounded-lg transition active:scale-95 flex items-center gap-1">
             <span>🦴</span>
             <span id="skeletonToggleText">隱藏骨架</span>
@@ -458,6 +469,26 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         </div>
       </div>
     </div>
+
+        <section id="sepPanel" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col gap-2.5 shadow-lg" aria-label="髖肩分離">
+          <h2 class="operation-heading">髖肩分離（AI 推測）</h2>
+          <div id="sepVerdict" role="status" class="rounded-xl border border-slate-700 p-2.5 text-sm leading-relaxed">等骨架分析完成…</div>
+          <div class="grid grid-cols-3 gap-1.5">
+            <button id="btnJumpFoot" class="bg-slate-100 text-slate-950 text-xs font-bold px-2 py-2.5 rounded-lg active:scale-95 transition">跳到前腳落地</button>
+            <button id="btnMarkFoot" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2 py-2.5 rounded-lg border border-slate-700 active:scale-95 transition">這格設為落地</button>
+            <button id="btnJumpRelease" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2 py-2.5 rounded-lg border border-slate-700 active:scale-95 transition">跳到出手</button>
+          </div>
+          <details class="text-xs text-slate-300 leading-relaxed">
+            <summary class="cursor-pointer text-slate-200 font-semibold">這在看什麼？（運動科學來源）</summary>
+            <ul class="list-disc pl-5 mt-2 flex flex-col gap-1.5">
+              <li>髖肩分離的定義：前腳落地時，<b>髖要轉開、軀幹保持關閉</b>。——<a href="https://www.drivelinebaseball.com/2017/05/mobility-pitching-mechanics/" target="_blank" rel="noopener" class="text-lime-300 underline">Driveline</a></li>
+              <li><b>時機比度數重要</b>：骨盆先轉到最快、軀幹之後才轉到最快，這個先後比分離幾度更關鍵。——<a href="https://drivelinebaseball.com/2019/03/making-movement-changes-weight-room" target="_blank" rel="noopener" class="text-lime-300 underline">Driveline</a></li>
+              <li>理想順序是前腳落地 → 骨盆旋轉 → 上半身旋轉 → 手肘伸直 → 肩內旋。——<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC9950989/" target="_blank" rel="noopener" class="text-lime-300 underline">ASMI 臨床指南</a></li>
+              <li>少棒追蹤 7 年的研究：落地時的軀幹分離會<b>隨年齡自然增加</b>。小孩做得少是正常的，請跟他自己以前的影片比。——<a href="https://pubmed.ncbi.nlm.nih.gov/28968146/" target="_blank" rel="noopener" class="text-lime-300 underline">ASMI（Fleisig 等）</a></li>
+              <li>限制：這裡的深度是 AI 從單一畫面推測的。骨盆與軀幹轉速的精準時機，連高品質慢動作影片都看不出來，要靠實驗室 3D 量測。——<a href="https://drivelinebaseball.com/blogs/blog/pitching-assessments-changing-mechanics" target="_blank" rel="noopener" class="text-lime-300 underline">Driveline</a></li>
+            </ul>
+          </details>
+        </section>
 
         <details id="annotationSection">
           <summary>標註工具<span>畫線、文字與復原</span></summary>
@@ -930,6 +961,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     // Pose frame cache: key is quantized frame index Math.round(time * 30)
     const poseCache = new Map();
+    const worldCache = new Map(); // 同一格的 MediaPipe 3D 座標（公尺、以髖為中心），供髖肩分離推估
+    let lastCropWorld = null;
     let lastValidLandmarks = null;
     let lastValidTime = 0;
 
@@ -1042,7 +1075,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (!video.videoWidth || !currentVideoObjectUrl) return;
       if (isPlaying) pauseVideo(false, false);
       cancelTrackAnalysis();
-      poseCache.clear();
+      poseCache.clear(); worldCache.clear(); resetSeparation();
       currentLandmarks = null; currentPoseStamp = null; lastSentFrame = null;
       hasEverDetectedRealPerson = false; smoothedCalloutBox = null;
       targetChoice = { source: sourceGeneration, ...choice };
@@ -1067,7 +1100,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (!video.videoWidth) return;
       if (isPlaying) pauseVideo(false, false);
       cancelTrackAnalysis();
-      poseCache.clear();
+      poseCache.clear(); worldCache.clear(); resetSeparation();
       targetChoice = null; currentLandmarks = null; currentPoseStamp = null;
       hasEverDetectedRealPerson = false;
       showPickOverlay();
@@ -1100,6 +1133,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         analysisCtx.drawImage(analysisVideo, ix0, iy0, ix1 - ix0, iy1 - iy0, (ix0 - sx) * k, (iy0 - sy) * k, (ix1 - ix0) * k, (iy1 - iy0) * k);
       }
       const res = await sendAndWait(engine, analysisCanvas);
+      lastCropWorld = res && res.poseWorldLandmarks ? res.poseWorldLandmarks.map(p => ({ ...p })) : null;
       if (!res || !res.poseLandmarks || res.poseLandmarks.length < 25) return null;
       return res.poseLandmarks.map(p => ({ ...p, x: (sx + p.x * side) / W, y: (sy + p.y * side) / H }));
     }
@@ -1162,8 +1196,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         }
         const W = analysisVideo.videoWidth || 1, H = analysisVideo.videoHeight || 1;
         modelSourceGeneration = source;
-        const store = (item, landmarks) => {
+        const store = (item, landmarks, world = null) => {
           poseCache.set(item.index, landmarks); // 未偵測到人物誠實記為 null
+          worldCache.set(item.index, landmarks && world ? world : null);
           if (landmarks) hasEverDetectedRealPerson = true;
           job.done++;
           if (job.done % 4 === 0 || job.done === job.total) {
@@ -1187,7 +1222,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
             analysisCtx.drawImage(analysisVideo, 0, 0, analysisCanvas.width, analysisCanvas.height);
             const res = await sendAndWait(engine, analysisCanvas);
             if (stale()) return;
-            store(frames[i], res && res.poseLandmarks && res.poseLandmarks.length >= 25 ? res.poseLandmarks.map(p => ({ ...p })) : null);
+            const okRes = res && res.poseLandmarks && res.poseLandmarks.length >= 25;
+            store(frames[i], okRes ? res.poseLandmarks.map(p => ({ ...p })) : null,
+              okRes && res.poseWorldLandmarks ? res.poseWorldLandmarks.map(p => ({ ...p })) : null);
             setAnalyzedSpan(0, (i + 1) / n);
           }
         } else {
@@ -1248,7 +1285,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
                 if (misses <= 20) box = { ...box, side: Math.min(maxSide, box.side * 1.12) };
                 if (misses === 2) await withPoseTimeout(Promise.resolve(engine.reset()), 10000, '模型重設逾時');
               }
-              store(frames[i], lm);
+              store(frames[i], lm, lm ? lastCropWorld : null);
               const isBackward = order[0] < i0; // 往前那一趟開始時，往後已全部完成
               setAnalyzedSpan(isBackward ? i / n : i0 / n, isBackward ? 1 : (i + 1) / n);
             }
@@ -1429,6 +1466,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         lastValidLandmarks = currentLandmarks;
         lastValidTime = curTime;
         poseCache.set(frameKey, currentLandmarks);
+        worldCache.set(frameKey, results.poseWorldLandmarks ? results.poseWorldLandmarks.map(p => ({ ...p })) : null);
         fallbackNotice.classList.add('hidden');
         reportPoseStatus('AI 骨架追蹤中', `已辨識影格 ${curTime.toFixed(3)} 秒。${showSkeleton ? '' : '骨架顯示目前已關閉，請開啟「顯示骨架」。'}`);
         statusDot.className = "w-2 h-2 rounded-full bg-emerald-400";
@@ -1554,7 +1592,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         currentVideoObjectUrl = null;
       }
 
-      poseCache.clear();
+      poseCache.clear(); worldCache.clear(); resetSeparation();
       resetAnalysisVideo();
       targetChoice = null; hidePickOverlay(); btnRepick.classList.add('hidden');
       smoothedCalloutBox = null;
@@ -1619,7 +1657,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       statusDot.className = "w-2 h-2 rounded-full bg-yellow-400 animate-pulse";
       
       // 重置狀態
-      poseCache.clear();
+      poseCache.clear(); worldCache.clear(); resetSeparation();
       cancelTrackAnalysis();
       targetChoice = null; hidePickOverlay(); btnRepick.classList.add('hidden');
       smoothedCalloutBox = null;
@@ -1909,6 +1947,251 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     video.addEventListener('seeked', () => { if (isPlaying) startSmoothBlend(); });
     video.addEventListener('ratechange', () => { if (isPlaying) startSmoothBlend(); });
 
+    /* ==========================================================================
+       髖肩分離（AI 推測，不顯示度數）
+       - 兩肩、兩髖四點：共面＝沒扭（白），扭開＝綠。以「髖中點→肩中點」為脊椎軸，
+         把肩線、髖線投影到垂直脊椎的平面上，兩線夾角就是扭轉；可扣掉軀幹前傾／側傾。
+       - 深度是 MediaPipe 從單一畫面推測的，只當趨勢看，所以只呈現顏色與時機，不顯示數字。
+       - 看的重點依 Driveline／ASMI：前腳落地時「髖已開、肩還關著」，以及髖先肩後的順序。
+       - 門檻是顯示用的選擇，不是標準值；小角度一律當沒扭，避免推測雜訊造成閃爍。
+       ========================================================================== */
+    const SEP_MIN_VIS = 0.5, SEP_ON_DEG = 10, SEP_FULL_DEG = 35;
+    const SEP_WHITE = [226, 232, 240], SEP_LIME = [163, 230, 53];
+    let separationEnabled = true;
+    try { separationEnabled = localStorage.getItem('pf-separation') !== '0'; } catch (_) {}
+    let sepCache = null, manualFoot = null;
+    const btnSeparation = document.getElementById('btnSeparation');
+    const separationStatusText = document.getElementById('separationStatusText');
+    const sepPanel = document.getElementById('sepPanel');
+    const sepVerdict = document.getElementById('sepVerdict');
+    const sepBadge = document.getElementById('sepBadge');
+    const sepStripRow = document.getElementById('sepStripRow');
+    const sepStrip = document.getElementById('sepStrip');
+
+    function resetSeparation() { sepCache = null; manualFoot = null; }
+    const v3 = {
+      sub: (a, b) => [a.x - b.x, a.y - b.y, a.z - b.z],
+      mid: (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 }),
+      dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+      cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]],
+      norm: a => Math.hypot(a[0], a[1], a[2]),
+    };
+    function sepPointOk(p) { return p && Number.isFinite(p.x) && Number.isFinite(p.y) && Number.isFinite(p.z)
+      && (p.visibility === undefined || p.visibility >= SEP_MIN_VIS); }
+    // 回傳 { deg, signed }；signed 正負只用於俯視小圖的方向
+    function torsoTwist(w) {
+      if (!w) return null;
+      const ls = w[11], rs = w[12], lh = w[23], rh = w[24];
+      if (![ls, rs, lh, rh].every(sepPointOk)) return null;
+      const spine = v3.sub(v3.mid(ls, rs), v3.mid(lh, rh));
+      const sl = v3.norm(spine); if (!(sl > 1e-6)) return null;
+      const s = spine.map(c => c / sl);
+      const proj = v => { const k = v3.dot(v, s); return [v[0] - k * s[0], v[1] - k * s[1], v[2] - k * s[2]]; };
+      const a = proj(v3.sub(rs, ls)), b = proj(v3.sub(rh, lh));
+      const na = v3.norm(a), nb = v3.norm(b); if (!(na > 1e-6 && nb > 1e-6)) return null;
+      const cos = Math.max(-1, Math.min(1, v3.dot(a, b) / (na * nb)));
+      const deg = Math.acos(cos) * 180 / Math.PI;
+      const sign = v3.dot(v3.cross(b, a), s) >= 0 ? 1 : -1;
+      return { deg, signed: deg * sign };
+    }
+    function median(arr) { const a = arr.slice().sort((x, y) => x - y); return a[a.length >> 1]; }
+    function sepLevel(deg) { return deg === null ? null : Math.max(0, Math.min(1, (deg - SEP_ON_DEG) / (SEP_FULL_DEG - SEP_ON_DEG))); }
+    function sepColor(t, alpha) {
+      const c = SEP_WHITE.map((w, i) => Math.round(w + (SEP_LIME[i] - w) * t));
+      return `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
+    }
+    function sepKeyTime(key) { return sourceFrameIndex ? sourceFrameIndex.seekTime(key) : key * fallbackFrameDuration; }
+
+    // 前腳落地：跨步腳（水平移動最多的腳踝）快速前移後停下的第一格；出手：之後投球手腕最快的那一格
+    function detectEvents(keys) {
+      const W = video.videoWidth || 1, H = video.videoHeight || 1;
+      const series = idx => keys.map(k => { const lm = poseCache.get(k); const p = lm && lm[idx];
+        return p && credibleBodyPoint(p) ? { x: p.x * W, y: p.y * H } : null; });
+      const smoothX = arr => arr.map((p, i) => { const win = arr.slice(Math.max(0, i - 2), i + 3).filter(Boolean);
+        return p && win.length ? win.reduce((a, q) => a + q.x, 0) / win.length : null; });
+      const left = smoothX(series(27)), right = smoothX(series(28));
+      const range = a => { const v = a.filter(x => x !== null); return v.length > 5 ? Math.max(...v) - Math.min(...v) : 0; };
+      const strideLeft = range(left) >= range(right);
+      const xs = strideLeft ? left : right;
+      if (range(xs) < Math.max(W, H) * 0.03) return { foot: null, release: null, strideLeft };
+      const vel = xs.map((x, i) => (i && x !== null && xs[i - 1] !== null) ? Math.abs(x - xs[i - 1]) : 0);
+      let peak = 0; vel.forEach((v, i) => { if (v > vel[peak]) peak = i; });
+      let foot = null;
+      for (let i = peak + 1; i < vel.length - 1; i++) {
+        if (xs[i] !== null && vel[i] < vel[peak] * 0.2 && vel[i + 1] < vel[peak] * 0.2) { foot = i; break; }
+      }
+      let release = null;
+      if (foot !== null) {
+        const wrist = series(strideLeft ? 16 : 15);
+        const fps = sourceFrameIndex && sourceFrameIndex.fps ? sourceFrameIndex.fps : 30;
+        const end = Math.min(keys.length - 1, foot + Math.round(fps * 0.6));
+        let best = 0;
+        for (let i = foot + 1; i <= end; i++) {
+          const a = wrist[i], b = wrist[i - 1];
+          if (a && b) { const sp = Math.hypot(a.x - b.x, a.y - b.y); if (sp > best) { best = sp; release = i; } }
+        }
+      }
+      return { foot: foot === null ? null : keys[foot], release: release === null ? null : keys[release], strideLeft };
+    }
+
+    function getSeparation() {
+      if (!separationEnabled || !video.videoWidth) return null;
+      const stamp = `${sourceGeneration}|${trackJob ? trackJob.done : 0}|${poseCache.size}|${manualFoot}`;
+      if (sepCache && sepCache.stamp === stamp) return sepCache;
+      const keys = [...worldCache.keys()].filter(k => poseCache.has(k)).sort((a, b) => a - b);
+      const raw = keys.map(k => torsoTwist(worldCache.get(k)));
+      // 5 格中位數去掉單格亂跳；缺格保持缺格，不補
+      const deg = raw.map((r, i) => { if (!r) return null;
+        const win = raw.slice(Math.max(0, i - 2), i + 3).filter(Boolean).map(x => x.deg);
+        return win.length >= 3 ? median(win) : null; });
+      const level = new Map(), signed = new Map();
+      keys.forEach((k, i) => { level.set(k, sepLevel(deg[i])); if (raw[i]) signed.set(k, raw[i].signed); });
+      const ev = trackComplete() || !hasTargetChoice() ? detectEvents(keys) : { foot: null, release: null };
+      const foot = manualFoot !== null ? manualFoot : ev.foot;
+      let footLevel = null;
+      if (foot !== null) {
+        const near = [foot - 1, foot, foot + 1].map(k => level.get(k)).filter(v => v !== null && v !== undefined);
+        footLevel = near.length ? median(near) : null;
+      }
+      sepCache = { stamp, keys, level, signed, foot, release: ev.release, footLevel, manual: manualFoot !== null };
+      drawSeparationStrip();
+      updateSeparationPanel();
+      return sepCache;
+    }
+
+    function updateSeparationPanel() {
+      const on = separationEnabled && !!video.videoWidth && hasTargetChoice();
+      sepPanel.classList.toggle('hidden', !on);
+      sepStripRow.classList.toggle('hidden', !on);
+      if (!on || !sepCache) return;
+      const done = trackComplete() || !hasTargetChoice();
+      let html, border = '#334155';
+      if (!done) html = '骨架分析完成後，會自動找出前腳落地那一格。';
+      else if (sepCache.foot === null) html = '<b>找不到前腳落地</b><br><span class="text-slate-400">請逐格到前腳剛踩地的那一格，按「這格設為落地」。</span>';
+      else if (sepCache.footLevel === null) html = '<b>落地這幾格判斷不了</b><br><span class="text-slate-400">肩或髖被擋住、骨架不清楚，所以不上色、不猜。可換一格按「這格設為落地」。</span>';
+      else if (sepCache.footLevel >= 0.5) { border = '#a3e635';
+        html = '<b>前腳落地：髖已轉開、肩還留在後面</b><br><span class="text-slate-400">有做到髖肩分離。接著看熱度帶：綠色應該在落地前後出現，出手前退回白色。</span>'; }
+      else html = '<b>前腳落地：髖肩幾乎沒有拉開</b><br><span class="text-slate-400">可能是髖還沒開，或肩膀已經跟著開了。逐格看落地前後幾格，比較胸口和皮帶扣的朝向。</span>';
+      if (done && sepCache.foot !== null) html += `<br><span class="text-slate-500 text-[11px]">落地點：${sepCache.manual ? '手動標記' : 'AI 自動判斷（不對可手動改）'}</span>`;
+      sepVerdict.innerHTML = html;
+      sepVerdict.style.borderColor = border;
+    }
+
+    function drawSeparationStrip() {
+      if (!sepStrip || sepStripRow.classList.contains('hidden') && !separationEnabled) return;
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const w = Math.max(1, Math.round(sepStrip.clientWidth * dpr)), h = Math.max(1, Math.round(18 * dpr));
+      if (sepStrip.width !== w || sepStrip.height !== h) { sepStrip.width = w; sepStrip.height = h; }
+      const ctx = sepStrip.getContext('2d');
+      ctx.clearRect(0, 0, w, h);
+      const sep = sepCache; if (!sep || !sep.keys.length) return;
+      const lastKey = getPoseCacheKey(Math.max(0, effectiveDuration - 0.000001)) || sep.keys[sep.keys.length - 1] || 1;
+      const y0 = 4 * dpr, bh = h - 8 * dpr;
+      ctx.fillStyle = 'rgba(226,232,240,0.12)'; ctx.fillRect(0, y0, w, bh);
+      const cell = Math.max(1, w / (lastKey + 1));
+      for (const k of sep.keys) {
+        const t = sep.level.get(k); if (t === null || t === undefined) continue;
+        ctx.fillStyle = sepColor(t, 0.15 + 0.8 * t);
+        ctx.fillRect(k / (lastKey + 1) * w, y0, Math.ceil(cell), bh);
+      }
+      if (sep.release !== null) {
+        const x = (sep.release + 0.5) / (lastKey + 1) * w;
+        ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2 * dpr; ctx.setLineDash([3 * dpr, 3 * dpr]);
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); ctx.setLineDash([]);
+      }
+      if (sep.foot !== null) {
+        const x = (sep.foot + 0.5) / (lastKey + 1) * w;
+        ctx.fillStyle = '#020617'; ctx.strokeStyle = '#f8fafc'; ctx.lineWidth = 2.5 * dpr;
+        ctx.beginPath(); ctx.arc(x, h / 2, 6 * dpr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      }
+    }
+
+    function drawSeparationOverlay(ctx, lm) {
+      const sep = getSeparation(); if (!sep || !lm) return;
+      const key = getPoseCacheKey(displayedFrameTime());
+      const pts = [11, 12, 24, 23].map(i => lm[i]);
+      if (!pts.every(p => p && credibleBodyPoint(p))) return;
+      const c = pts.map(p => mapVideoToCanvas(p.x, p.y, ctx.canvas));
+      const t = sep.level.get(key);
+      ctx.save();
+      ctx.beginPath(); c.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath();
+      if (t === null || t === undefined) {
+        ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(148,163,184,0.8)'; ctx.lineWidth = 2; ctx.stroke();
+      } else {
+        ctx.fillStyle = sepColor(t, 0.18 + 0.47 * t); ctx.fill();
+        ctx.strokeStyle = sepColor(t, 0.9); ctx.lineWidth = 2; ctx.stroke();
+      }
+      ctx.setLineDash([4, 6]); ctx.strokeStyle = 'rgba(248,250,252,0.7)'; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.moveTo((c[0].x + c[1].x) / 2, (c[0].y + c[1].y) / 2); ctx.lineTo((c[2].x + c[3].x) / 2, (c[2].y + c[3].y) / 2); ctx.stroke();
+      ctx.restore();
+      // 俯視小圖：沿脊椎往下看，白線＝髖、灰線＝肩，中間色塊＝扭開
+      const sg = sep.signed.get(key);
+      if (sg !== undefined && t !== null && t !== undefined) {
+        const dpr = ctx.canvas.width / Math.max(1, ctx.canvas.clientWidth || ctx.canvas.width);
+        const r = 34 * dpr, b = getRenderBounds(ctx.canvas);
+        const cx = b.destX + b.destW - r - 14 * dpr, cy = b.destY + r + 14 * dpr;
+        const hipA = -Math.PI / 6, shA = hipA + sg * Math.PI / 180;
+        ctx.save();
+        ctx.fillStyle = 'rgba(2,6,23,0.8)'; ctx.beginPath(); ctx.arc(cx, cy, r + 6 * dpr, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#334155'; ctx.lineWidth = 1.5 * dpr; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = sepColor(t, 0.25 + 0.5 * t);
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r * 0.9, Math.min(hipA, shA), Math.max(hipA, shA)); ctx.closePath(); ctx.fill();
+        const line = (a, col) => { ctx.strokeStyle = col; ctx.lineWidth = 4 * dpr; ctx.lineCap = 'round';
+          ctx.beginPath(); ctx.moveTo(cx - Math.cos(a) * r * 0.85, cy - Math.sin(a) * r * 0.85); ctx.lineTo(cx + Math.cos(a) * r * 0.85, cy + Math.sin(a) * r * 0.85); ctx.stroke(); };
+        line(shA, '#94a3b8'); line(hipA, '#f8fafc');
+        ctx.fillStyle = '#cbd5e1'; ctx.font = `${11 * dpr}px "Noto Sans TC", system-ui, sans-serif`; ctx.textAlign = 'center';
+        ctx.fillText('俯視：白＝髖 灰＝肩', cx, cy + r + 18 * dpr);
+        ctx.restore();
+      }
+    }
+    function updateSeparationBadge() {
+      const sep = separationEnabled ? sepCache : null;
+      const key = getPoseCacheKey(displayedFrameTime());
+      const show = !!(sep && sep.foot !== null && Math.abs(key - sep.foot) <= 1 && showSkeleton);
+      sepBadge.classList.toggle('hidden', !show);
+      if (!show) return;
+      if (sep.footLevel === null) { sepBadge.textContent = '前腳落地：這幾格判斷不了'; sepBadge.style.borderColor = '#64748b'; }
+      else if (sep.footLevel >= 0.5) { sepBadge.textContent = '前腳落地：髖已開、肩還關著'; sepBadge.style.borderColor = '#a3e635'; }
+      else { sepBadge.textContent = '前腳落地：髖肩幾乎沒有拉開'; sepBadge.style.borderColor = '#e2e8f0'; }
+    }
+    function jumpToKey(key) {
+      if (key === null || key === undefined || !effectiveDuration) return;
+      endScrubSession();
+      pauseVideo(false, false);
+      const target = Math.min(Math.max(0, effectiveDuration - 0.000001), sepKeyTime(key));
+      timelineSeekTarget = target;
+      video.currentTime = target;
+      if (!video.seeking) { timelineSeekTarget = null; observePresentedFrame(); triggerPoseInference(); renderStage(); }
+    }
+    function syncSeparationButton() {
+      separationStatusText.textContent = `髖肩分離: ${separationEnabled ? '開' : '關'}`;
+      btnSeparation.classList.toggle('text-lime-300', separationEnabled);
+      btnSeparation.classList.toggle('text-slate-400', !separationEnabled);
+    }
+    syncSeparationButton();
+    btnSeparation.addEventListener('click', () => {
+      separationEnabled = !separationEnabled;
+      try { localStorage.setItem('pf-separation', separationEnabled ? '1' : '0'); } catch (_) {}
+      syncSeparationButton();
+      sepCache = null;
+      if (!separationEnabled) { sepPanel.classList.add('hidden'); sepStripRow.classList.add('hidden'); sepBadge.classList.add('hidden'); }
+      renderStage();
+    });
+    document.getElementById('btnJumpFoot').addEventListener('click', () => { const s = getSeparation(); if (s) jumpToKey(s.foot); });
+    document.getElementById('btnJumpRelease').addEventListener('click', () => { const s = getSeparation(); if (s) jumpToKey(s.release); });
+    document.getElementById('btnMarkFoot').addEventListener('click', () => {
+      if (!video.videoWidth) return;
+      if (isPlaying) pauseVideo(false, false);
+      manualFoot = getPoseCacheKey(video.currentTime || 0);
+      sepCache = null; renderStage();
+    });
+    sepStrip.addEventListener('click', (e) => {
+      const rect = sepStrip.getBoundingClientRect();
+      const lastKey = getPoseCacheKey(Math.max(0, effectiveDuration - 0.000001)) || 1;
+      jumpToKey(Math.max(0, Math.min(lastKey, Math.floor((e.clientX - rect.left) / Math.max(1, rect.width) * (lastKey + 1)))));
+    });
+    window.addEventListener('resize', () => drawSeparationStrip());
+
     function renderStage() {
       if (!mainCanvas.width || !mainCanvas.height) return;
       const cw = mainCanvas.width;
@@ -1959,8 +2242,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         heldSkeleton = { source: sourceGeneration, landmarks: renderLandmarks };
       }
       if (renderLandmarks && renderLandmarks.length >= 25) {
+        if (separationEnabled) drawSeparationOverlay(mainCtx, renderLandmarks);
         drawSimplifiedBaseballSkeleton(mainCtx, renderLandmarks, isCurrentLandmarkEstimated);
       }
+      if (separationEnabled) { getSeparation(); updateSeparationPanel(); updateSeparationBadge(); }
+      else sepBadge.classList.add('hidden');
 
       // 4. 更新遙測條與時間格計數
       updateTelemetryAndCounters();
