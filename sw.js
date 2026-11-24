@@ -4,7 +4,7 @@
  * - 程式與模型：快取優先。第一次用 AI 時載入的模型會留在手機，球場沒訊號也能分析
  * 發新版時改 VERSION，舊快取會在啟用時清掉。
  */
-const VERSION = 'pf-2026-11-24d';
+const VERSION = 'pf-2026-11-24e';
 const CACHE = `pitchframe-${VERSION}`;
 const SHELL = ['./', './index.html', './tailwind.js', './pose.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png'];

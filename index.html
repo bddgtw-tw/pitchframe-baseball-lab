@@ -2106,6 +2106,40 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       }
     }
 
+
+    /* 扭轉張力：像擰毛巾。肩線與髖線之間畫幾條「纖維」，沒扭時直立平行；
+       扭越多，纖維越斜、越交錯，並且越亮、越粗、帶發光。斜的方向依髖→肩的扭轉方向。
+       這是示意張力的視覺語言，不是幾何量測；程度來自 sepLevel（推測扭轉角經平滑後的 0..1）。
+       c = [左肩, 右肩, 右髖, 左髖]（畫面座標） */
+    const FIBER_COUNT = 7;
+    function drawTwistFibers(ctx, c, t, signed) {
+      const dpr = ctx.canvas.width / Math.max(1, ctx.canvas.clientWidth || ctx.canvas.width);
+      const lerp = (p, q, u) => ({ x: p.x + (q.x - p.x) * u, y: p.y + (q.y - p.y) * u });
+      const H = u => lerp(c[3], c[2], u), S = u => lerp(c[0], c[1], u);
+      const tau = 0.9 * t * (signed < 0 ? -1 : 1); // 肩端相對髖端錯開的比例（0＝直立）
+      ctx.save();
+      ctx.beginPath(); c.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath();
+      ctx.fillStyle = sepColor(t, 0.08 + 0.17 * t); ctx.fill();
+      ctx.save(); ctx.clip(); // 斜紋只畫在軀幹四邊形內
+      ctx.lineCap = 'round';
+      ctx.shadowColor = sepColor(1, 0.9); ctx.shadowBlur = 10 * t * dpr;
+      ctx.lineWidth = (1.5 + 2 * t) * dpr; ctx.strokeStyle = sepColor(t, 0.35 + 0.6 * t);
+      const extra = Math.ceil(Math.abs(tau) * FIBER_COUNT) + 1;
+      for (let i = -extra; i <= FIBER_COUNT + extra; i++) {
+        const u = i / FIBER_COUNT;
+        const p0 = H(u), p1 = S(u + tau);
+        const mid = lerp(p0, p1, 0.5), dx = p1.x - p0.x, dy = p1.y - p0.y, len = Math.hypot(dx, dy) || 1;
+        const bow = 0.1 * t * len * (tau < 0 ? -1 : 1); // 中段微彎，像被擰緊的繩
+        ctx.beginPath(); ctx.moveTo(p0.x, p0.y);
+        ctx.quadraticCurveTo(mid.x - dy / len * bow, mid.y + dx / len * bow, p1.x, p1.y); ctx.stroke();
+      }
+      ctx.restore();
+      // 外框：肩線與髖線兩端連線
+      ctx.shadowBlur = 0; ctx.lineWidth = 1.5 * dpr; ctx.strokeStyle = sepColor(t, 0.6);
+      ctx.beginPath(); c.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath(); ctx.stroke();
+      ctx.restore();
+    }
+
     function drawSeparationOverlay(ctx, lm) {
       const sep = getSeparation(); if (!sep || !lm) return;
       const key = getPoseCacheKey(displayedFrameTime());
@@ -2114,12 +2148,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const c = pts.map(p => mapVideoToCanvas(p.x, p.y, ctx.canvas));
       const t = sep.level.get(key);
       ctx.save();
-      ctx.beginPath(); c.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath();
       if (t === null || t === undefined) {
+        ctx.beginPath(); c.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath();
         ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(148,163,184,0.8)'; ctx.lineWidth = 2; ctx.stroke();
       } else {
-        ctx.fillStyle = sepColor(t, 0.18 + 0.47 * t); ctx.fill();
-        ctx.strokeStyle = sepColor(t, 0.9); ctx.lineWidth = 2; ctx.stroke();
+        drawTwistFibers(ctx, c, t, sep.signed.get(key) || 0);
       }
       ctx.setLineDash([4, 6]); ctx.strokeStyle = 'rgba(248,250,252,0.7)'; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.moveTo((c[0].x + c[1].x) / 2, (c[0].y + c[1].y) / 2); ctx.lineTo((c[2].x + c[3].x) / 2, (c[2].y + c[3].y) / 2); ctx.stroke();
