@@ -1,6 +1,6 @@
 # PitchFrame ⚾
 
-[![Verify PitchFrame](https://github.com/bddgtw-tw/pitchframe-baseball-lab/actions/workflows/verify.yml/badge.svg)](https://github.com/bddgtw-tw/pitchframe-baseball-lab/actions/workflows/verify.yml)
+[![Verify PitchFrame](https://github.com/bddgtw-tw/pitchframe-baseball-lab/actions/workflows/verify.yml/badge.svg)](https://github.com/bddgtw-tw/pitchframe-baseball-lab/actions/workflows/verify.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 **拍一球，看懂孩子的投球。** 手機拍下孩子投球，PitchFrame 自動畫出骨架、找出前腳落地與出手，再做成一張圖讓你傳給教練。免費、免登入，影片不會上傳。
 
@@ -84,8 +84,10 @@ node tests/events.test.cjs
 
 想幫忙實測？請看 [5 分鐘家長／教練實測任務](PILOT.md)。請勿公開兒童影片或可識別資訊。
 
-## Third-party components
+## 授權
+
+PitchFrame 的程式碼採 [MIT License](LICENSE)：可以自由使用、修改與分享，只要保留版權與授權聲明。
+
+第三方元件依各自授權使用：
 
 - MediaPipe Pose `0.5.1675469404`，Apache 2.0；見 `pose-LICENSE-Apache-2.0.txt`。
-
-目前 repo 尚未宣告整體專案授權。第三方元件仍依各自授權使用；若要重用本專案程式，請先向維護者確認。
