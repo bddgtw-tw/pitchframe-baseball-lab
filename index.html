@@ -2297,7 +2297,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (sep.manual && sep.aiFoot !== null && Math.abs(sep.foot - sep.aiFoot) > 4)
         warnings.push(`手動落地點和 AI 判斷（第 ${sep.aiFoot} 格）差了 ${Math.abs(sep.foot - sep.aiFoot)} 格，請確認是前腳剛踩到地的那一格。`);
       if (sep.foot !== null && sep.release !== null && sep.foot >= sep.release)
-        warnings.push('落地點在出手之後，可能標錯了。');
+        warnings.push('落地點和出手是同一格或在出手之後，可能標錯了。');
       const limits = ['扭轉深度由 AI 從單一畫面推測，只看顏色與時機，不代表精準角度。'];
       if (fps < 100) limits.push(`影片每秒約 ${Math.round(fps)} 格，落地前後的轉動只佔幾格；建議改用慢動作 240fps 拍攝。`);
       if (sepAngle.value === '側面') limits.push('側拍時髖與肩接近正對或背對鏡頭，深度推測較不穩定；正前方或正後方拍攝較準。');
