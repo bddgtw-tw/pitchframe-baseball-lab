@@ -228,21 +228,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     .guide-number { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: #bef264; color: #14202b; font-weight: 900; }
     .science-note { margin-top: 12px; padding-top: 12px; border-top: 1px solid #2a3e4e; color: #a8bbc8; font-size: 12px; line-height: 1.65; }
     .header-link { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 10px; border: 1px solid #405669; border-radius: 8px; color: #d7e4ec; font-size: 12px; font-weight: 700; }
-    #progressTracker { margin-top: 18px; padding: 14px; border: 1px solid #2a3e4e; border-radius: 12px; background: #0d1822; }
-    #progressList { display: grid; gap: 6px; margin-top: 10px; }
-    .progress-item { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid #203342; color: #a8bbc8; font-size: 11px; line-height: 1.5; }
-    #captureQuality { border: 1px solid #2a3e4e; border-radius: 12px; background: #0d1822; padding: 14px; }
-    #captureChecklist { display: grid; gap: 8px; margin-top: 10px; }
-    #captureChecklist label { display: flex; align-items: flex-start; gap: 9px; color: #c4d2dc; font-size: 12px; line-height: 1.45; cursor: pointer; }
-    #captureChecklist input { width: 18px; height: 18px; margin-top: 0; accent-color: #a3e635; flex: 0 0 auto; }
-    #analysisContext { margin: -6px 0 14px; padding: 14px 16px; border: 1px solid #2a3e4e; border-radius: 12px; background: #0d1822; }
-    #contextFields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-top: 10px; }
-    #contextFields label { display: grid; gap: 5px; color: #a8bbc8; font-size: 11px; }
-    #contextFields select { min-width: 0; min-height: 42px; padding: 0 10px; border: 1px solid #405669; border-radius: 8px; background: #101b27; color: #f1f5f9; font-size: 13px; }
     @media (min-width: 640px) {
       #exportActions { display: flex; }
       #parentGuide ol { grid-template-columns: repeat(3,minmax(0,1fr)); }
-      #contextFields { grid-template-columns: repeat(6,minmax(0,1fr)); }
     }
     @media (min-width: 1024px), (orientation: landscape) and (min-width: 600px) {
       #operationWorkspace { grid-template-columns: minmax(0,1fr); gap: 0; }
@@ -337,93 +325,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         </div>
       </div>
     </section>
-
-    <details id="sessionSetup" class="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2">
-      <summary class="cursor-pointer text-sm font-bold text-slate-100">分析設定 <span id="sessionSetupStatus" class="ml-2 text-xs font-normal text-amber-200">尚未完成</span></summary>
-      <div class="mt-3 grid gap-3">
-    <section id="analysisContext" aria-labelledby="analysisContextTitle">
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <h2 id="analysisContextTitle" class="text-sm font-bold text-slate-100">這次投球的分析背景</h2>
-          <p class="mt-1 text-[11px] text-slate-400">只存在這台裝置，不填姓名或球隊。慣用手會協助判斷出手手腕；其他欄位會寫入 AI 分析包，避免 AI 亂猜。</p>
-        </div>
-        <div class="flex shrink-0 flex-col items-end gap-1">
-          <span id="contextReadiness" class="rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-[11px] font-bold text-amber-200">背景待補</span>
-          <span id="contextSaved" class="hidden text-[11px] font-bold text-lime-300">已儲存</span>
-        </div>
-      </div>
-      <div id="contextFields">
-        <label>匿名球員
-          <select id="ctxAthleteSlot">
-            <option value="A">球員 A</option>
-            <option value="B">球員 B</option>
-            <option value="C">球員 C</option>
-          </select>
-        </label>
-        <label>投球手
-          <select id="ctxHandedness">
-            <option value="unknown">尚未設定</option>
-            <option value="right">右投</option>
-            <option value="left">左投</option>
-          </select>
-        </label>
-        <label>年齡層
-          <select id="ctxAgeGroup">
-            <option value="unknown">尚未設定</option>
-            <option value="U8">U8</option>
-            <option value="U10">U10</option>
-            <option value="U12">U12</option>
-            <option value="U15">U15</option>
-            <option value="16+">16 歲以上</option>
-          </select>
-        </label>
-        <label>拍攝視角
-          <select id="ctxCameraView">
-            <option value="unknown">尚未設定</option>
-            <option value="side-rear">側後方</option>
-            <option value="side">正側面</option>
-            <option value="rear">正後方</option>
-            <option value="front">正前方</option>
-          </select>
-        </label>
-        <label>投球環境
-          <select id="ctxSurface">
-            <option value="unknown">尚未設定</option>
-            <option value="mound">投手丘</option>
-            <option value="flat-ground">平地</option>
-          </select>
-        </label>
-        <label>身體狀況
-          <select id="ctxCondition">
-            <option value="unknown">尚未設定</option>
-            <option value="normal">沒有疼痛或明顯疲勞</option>
-            <option value="fatigued">明顯疲勞</option>
-            <option value="pain">有疼痛</option>
-          </select>
-        </label>
-      </div>
-      <p id="conditionWarning" class="hidden mt-3 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-200"></p>
-    </section>
-
-    <section id="captureQuality" aria-labelledby="captureQualityTitle">
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <h2 id="captureQualityTitle" class="text-sm font-bold text-slate-100">拍攝品質檢查</h2>
-          <p class="mt-1 text-[11px] text-slate-400">勾選你確定做到的項目。這些條件會寫入分析包，讓教練或 AI 先判斷資料能不能比較。</p>
-        </div>
-        <span id="captureQualityBadge" class="shrink-0 rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-[11px] font-bold text-amber-200">待確認</span>
-      </div>
-      <div id="captureChecklist">
-        <label><input id="qualityFullBody" type="checkbox"><span>全身、雙腳與投球手從開始到出手都在畫面內</span></label>
-        <label><input id="qualityStable" type="checkbox"><span>手機固定、沒有跟著球員平移或大幅晃動</span></label>
-        <label><input id="qualitySinglePitch" type="checkbox"><span>影片主要是一球，前後保留約 1 秒，沒有剪接或慢動作轉檔</span></label>
-        <label><input id="qualityComparable" type="checkbox"><span>若要比較前後：手機位置、方向、畫面比例與投手丘／平地和基準影片一致</span></label>
-      </div>
-      <p id="captureQualityAdvice" class="mt-2 text-[11px] leading-relaxed text-amber-200">尚未確認拍攝條件；可以分析，但請勿據此宣稱進步或退步。</p>
-    </section>
-      <p class="text-xs leading-relaxed text-slate-400">PitchFrame 是觀察與溝通工具，不是醫療診斷或實驗室 3D 動作分析。疼痛或明顯疲勞時應停止投球並尋求專業評估。</p>
-      </div>
-    </details>
 
     <div id="stageStatusBar" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;flex-shrink:0">
       <!-- Status bar outside the original video frame: AI Status & Current Frame -->
@@ -649,23 +550,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       載入影片並完成整段骨架分析後，這裡會顯示實際辨識覆蓋率。
     </div>
 
-    <details id="progressSection" class="mt-3 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2">
-      <summary class="cursor-pointer text-xs font-semibold text-slate-300">比較自己的前後影片（選用）</summary>
-    <section id="progressTracker" aria-labelledby="progressTitle" class="mt-3">
-      <div class="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h3 id="progressTitle" class="text-sm font-bold text-slate-100">進步追蹤</h3>
-          <p class="mt-1 text-[11px] text-slate-400">只保存最多 8 次去識別化數值，不保存影片、圖片或原始檔名。請只比較相同視角與環境。</p>
-        </div>
-        <div class="flex gap-2">
-          <button id="btnSaveBaseline" class="bg-slate-100 hover:bg-white text-slate-950 text-xs font-bold px-3 py-2 rounded-lg">儲存本次基準</button>
-          <button id="btnClearBaselines" class="bg-slate-900 hover:bg-slate-800 text-slate-400 text-xs px-3 py-2 rounded-lg border border-slate-700">清除紀錄</button>
-        </div>
-      </div>
-      <div id="progressList" aria-live="polite"><span class="text-xs text-slate-400">尚未儲存比較基準。</span></div>
-    </section>
-    </details>
-
     <div id="exportActions" class="mt-4 grid gap-2">
       <button id="btnShareAI" class="bg-lime-400 hover:bg-lime-300 active:scale-95 text-slate-950 text-sm font-bold px-4 py-3 rounded-lg transition">
         <span id="btnShareAIText">分享分析給教練／AI</span>
@@ -794,92 +678,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const sourceFrameStatus = document.getElementById("sourceFrameStatus");
     let videoDuration = 0;
     let effectiveDuration = 0;
-    const contextControls = {
-      athleteSlot: document.getElementById('ctxAthleteSlot'),
-      handedness: document.getElementById('ctxHandedness'),
-      ageGroup: document.getElementById('ctxAgeGroup'),
-      cameraView: document.getElementById('ctxCameraView'),
-      surface: document.getElementById('ctxSurface'),
-      condition: document.getElementById('ctxCondition')
-    };
-    const contextSaved = document.getElementById('contextSaved');
-    const contextReadiness = document.getElementById('contextReadiness');
-    const conditionWarning = document.getElementById('conditionWarning');
-    const qualityControls = {
-      fullBodyVisible: document.getElementById('qualityFullBody'),
-      cameraStable: document.getElementById('qualityStable'),
-      singleUneditedPitch: document.getElementById('qualitySinglePitch'),
-      comparableSetup: document.getElementById('qualityComparable')
-    };
-    const captureQualityBadge = document.getElementById('captureQualityBadge');
-    const captureQualityAdvice = document.getElementById('captureQualityAdvice');
-    const sessionSetup = document.getElementById('sessionSetup');
-    const sessionSetupStatus = document.getElementById('sessionSetupStatus');
-    let captureQuality = { fullBodyVisible: false, cameraStable: false, singleUneditedPitch: false, comparableSetup: false };
-    function syncCaptureQuality() {
-      for (const [key, control] of Object.entries(qualityControls)) control.checked = !!captureQuality[key];
-      const coreReady = captureQuality.fullBodyVisible && captureQuality.cameraStable && captureQuality.singleUneditedPitch;
-      captureQualityBadge.textContent = coreReady ? '基本條件通過' : '資料品質待確認';
-      captureQualityBadge.className = coreReady
-        ? 'shrink-0 rounded-full border border-lime-500/50 bg-lime-500/10 px-2 py-1 text-[11px] font-bold text-lime-200'
-        : 'shrink-0 rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-[11px] font-bold text-amber-200';
-      captureQualityAdvice.textContent = coreReady
-        ? (captureQuality.comparableSetup ? '拍攝基本條件與前後比較條件皆已自行確認。仍請人工檢查關鍵影格。' : '可做單次觀察；若要比較前後，還需確認相同拍攝設定。')
-        : '尚未確認拍攝基本條件；可以逐格查看，但請勿據此宣稱進步或退步。';
-      captureQualityAdvice.className = `mt-2 text-[11px] leading-relaxed ${coreReady ? 'text-lime-200' : 'text-amber-200'}`;
-    }
-    for (const [key, control] of Object.entries(qualityControls)) {
-      control.addEventListener('change', () => { captureQuality[key] = control.checked; syncCaptureQuality(); updateSessionSetupStatus(); });
-    }
-    let analysisContext = { athleteSlot: 'A', handedness: 'unknown', ageGroup: 'unknown', cameraView: 'unknown', surface: 'unknown', condition: 'unknown' };
-    try {
-      const saved = JSON.parse(localStorage.getItem('pf-analysis-context') || 'null');
-      if (saved && typeof saved === 'object') analysisContext = { ...analysisContext, ...saved };
-    } catch (_) {}
-    const contextFieldLabels = { handedness: '投球手', ageGroup: '年齡層', cameraView: '拍攝視角', surface: '投球環境', condition: '身體狀況' };
-    function missingAnalysisContext(context = analysisContext) {
-      return Object.keys(contextFieldLabels).filter(key => !context[key] || context[key] === 'unknown');
-    }
-    function sessionSetupComplete() {
-      return missingAnalysisContext().length === 0
-        && captureQuality.fullBodyVisible && captureQuality.cameraStable && captureQuality.singleUneditedPitch;
-    }
-    function updateSessionSetupStatus() {
-      const complete = sessionSetupComplete();
-      sessionSetupStatus.textContent = complete ? '完成' : '開始前完成';
-      sessionSetupStatus.className = `ml-2 text-xs font-normal ${complete ? 'text-lime-200' : 'text-amber-200'}`;
-    }
-    function syncAnalysisContext() {
-      for (const [key, control] of Object.entries(contextControls)) {
-        if ([...control.options].some(option => option.value === analysisContext[key])) control.value = analysisContext[key];
-      }
-      const stop = analysisContext.condition === 'pain';
-      const caution = analysisContext.condition === 'fatigued';
-      conditionWarning.classList.toggle('hidden', !stop && !caution);
-      conditionWarning.textContent = stop
-        ? '目前標記為有疼痛：請停止投球。PitchFrame 不應用來判斷能否繼續，請告知家長／教練並尋求合格醫療專業評估。'
-        : caution ? '目前標記為明顯疲勞：先停止高強度投球並休息。疲勞狀態下的動作不宜直接當成技術問題下結論。' : '';
-      const missing = missingAnalysisContext();
-      contextReadiness.textContent = missing.length ? `待補 ${missing.length} 項` : '分析背景完整';
-      contextReadiness.title = missing.length ? `尚未設定：${missing.map(key => contextFieldLabels[key]).join('、')}` : '投球手、年齡層、視角、環境與身體狀況皆已設定';
-      contextReadiness.className = missing.length
-        ? 'rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-1 text-[11px] font-bold text-amber-200'
-        : 'rounded-full border border-lime-500/50 bg-lime-500/10 px-2 py-1 text-[11px] font-bold text-lime-200';
-    }
-    for (const [key, control] of Object.entries(contextControls)) {
-      control.addEventListener('change', () => {
-        analysisContext[key] = control.value;
-        try { localStorage.setItem('pf-analysis-context', JSON.stringify(analysisContext)); } catch (_) {}
-        if (key === 'handedness') sepCache = null;
-        syncAnalysisContext();
-        updateSessionSetupStatus();
-        contextSaved.classList.remove('hidden');
-        setTimeout(() => contextSaved.classList.add('hidden'), 1400);
-      });
-    }
-    syncAnalysisContext();
-    syncCaptureQuality();
-    updateSessionSetupStatus();
     let isTimelineDragging = false;
     let timelineSeekTarget = null;
     let showSkeleton = true;
@@ -1857,8 +1655,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       
       // 重置狀態
       poseCache.clear(); worldCache.clear(); resetSeparation();
-      captureQuality = { fullBodyVisible: false, cameraStable: false, singleUneditedPitch: false, comparableSetup: false };
-      syncCaptureQuality();
       cancelTrackAnalysis();
       targetChoice = null; hidePickOverlay(); btnRepick.classList.add('hidden');
       smoothedCalloutBox = null;
@@ -2103,7 +1899,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         width: video.videoWidth || 1,
         height: video.videoHeight || 1,
         fps: ANALYSIS_SAMPLE_FPS,
-        handedness: analysisContext.handedness,
+        handedness: 'unknown',
         credible: credibleBodyPoint
       });
     }
@@ -3315,11 +3111,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       }
     });
 
-    let progressHistory = [];
-    try {
-      const saved = JSON.parse(localStorage.getItem('pf-progress-history') || '[]');
-      if (Array.isArray(saved)) progressHistory = saved.slice(0, 8);
-    } catch (_) {}
     function frameMetricsAtKey(key) {
       const lm = key === null || key === undefined ? null : poseCache.get(key);
       if (!lm || lm.length < 29) return null;
@@ -3338,93 +3129,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         rightKneeDegrees: calculateAngle(lm[24], lm[26], lm[28])
       };
     }
-    function currentSessionSnapshot(separation = getSeparation()) {
-      const sep = separation;
-      if (!sep || (sep.foot === null && sep.release === null)) return null;
-      const eventTime = key => key === null || key === undefined ? null : Number(sepKeyTime(key).toFixed(3));
-      const footTime = eventTime(sep.foot), releaseTime = eventTime(sep.release);
-      const phaseMs = footTime !== null && releaseTime !== null && releaseTime >= footTime
-        ? Math.round((releaseTime - footTime) * 1000) : null;
-      return {
-        schema: 'pitchframe-progress-v2',
-        savedAt: new Date().toISOString(),
-        context: { ...analysisContext },
-        captureQuality: { ...captureQuality, source: 'self-reported-by-user' },
-        source: {
-          durationSeconds: Number((effectiveDuration || 0).toFixed(3)),
-          width: video.videoWidth || null,
-          height: video.videoHeight || null,
-          fps: sourceFrameIndex && sourceFrameIndex.fps ? Number(sourceFrameIndex.fps.toFixed(3)) : null,
-          variableFrameRate: sourceFrameIndex ? !!sourceFrameIndex.variableFrameRate : null
-        },
-        events: {
-          footStrikeSeconds: footTime,
-          footStrikeSource: sep.foot === null ? null : sep.manualFoot ? 'manual' : 'automatic-estimate',
-          ballReleaseSeconds: releaseTime,
-          ballReleaseSource: sep.release === null ? null : sep.manualRelease ? 'manual' : 'automatic-estimate',
-          footStrikeToReleaseMilliseconds: phaseMs,
-          modelRelativeSeparationSignal0To1: sep.footLevel === null ? null : Number(sep.footLevel.toFixed(3))
-        },
-        footStrikeMetrics: frameMetricsAtKey(sep.foot),
-        ballReleaseMetrics: frameMetricsAtKey(sep.release)
-      };
-    }
-    function renderProgressHistory() {
-      const list = document.getElementById('progressList');
-      list.replaceChildren();
-      if (!progressHistory.length) {
-        const empty = document.createElement('span'); empty.className = 'text-[11px] text-slate-500'; empty.textContent = '尚未儲存比較基準。'; list.appendChild(empty); return;
-      }
-      progressHistory.slice(0, 3).forEach(item => {
-        const row = document.createElement('div'); row.className = 'progress-item';
-        const date = document.createElement('span'); date.textContent = new Date(item.savedAt).toLocaleString('zh-TW');
-        const detail = document.createElement('span');
-        detail.textContent = `球員 ${item.context.athleteSlot || 'A'}・${item.context.handedness === 'right' ? '右投' : item.context.handedness === 'left' ? '左投' : '手別未設'}・${item.context.cameraView || '視角未設'}・落地→出手 ${item.events.footStrikeToReleaseMilliseconds ?? '--'}ms`;
-        row.append(date, detail); list.appendChild(row);
-      });
-    }
-    document.getElementById('btnSaveBaseline').addEventListener('click', () => {
-      if (!video.videoWidth) { alert('請先載入並分析投球影片。'); return; }
-      const snapshot = currentSessionSnapshot();
-      if (!snapshot) { alert('請先完成分析，並確認前腳落地或出手事件。'); return; }
-      progressHistory = [snapshot, ...progressHistory].slice(0, 8);
-      try { localStorage.setItem('pf-progress-history', JSON.stringify(progressHistory)); } catch (_) {}
-      renderProgressHistory();
-    });
-    document.getElementById('btnClearBaselines').addEventListener('click', () => {
-      if (!progressHistory.length || !confirm('確定清除這台裝置上的所有比較基準？')) return;
-      progressHistory = [];
-      try { localStorage.removeItem('pf-progress-history'); } catch (_) {}
-      renderProgressHistory();
-    });
-    renderProgressHistory();
-
     function aiAnalysisPackage() {
       const sep = getSeparation();
-      const currentComparison = currentSessionSnapshot(sep);
-      const baseline = progressHistory.length ? progressHistory.find(item => (item.context.athleteSlot || 'A') === analysisContext.athleteSlot) || null : null;
-      const missingContext = missingAnalysisContext();
-      const contextComplete = missingContext.length === 0;
-      const contextComparable = !!(baseline && currentComparison && contextComplete
-        && (baseline.context.athleteSlot || 'A') === analysisContext.athleteSlot
-        && analysisContext.handedness !== 'unknown'
-        && baseline.context.handedness === analysisContext.handedness
-        && analysisContext.ageGroup !== 'unknown'
-        && baseline.context.ageGroup === analysisContext.ageGroup
-        && baseline.context.cameraView !== 'unknown'
-        && baseline.context.cameraView === analysisContext.cameraView
-        && analysisContext.surface !== 'unknown'
-        && baseline.context.surface === analysisContext.surface
-        && analysisContext.condition === 'normal'
-        && baseline.context.condition === 'normal');
-      const qualityCoreReady = captureQuality.fullBodyVisible && captureQuality.cameraStable && captureQuality.singleUneditedPitch;
-      const baselineQualityReady = !!(baseline?.captureQuality?.fullBodyVisible && baseline?.captureQuality?.cameraStable && baseline?.captureQuality?.singleUneditedPitch && baseline?.captureQuality?.comparableSetup);
-      const sameContext = contextComparable && qualityCoreReady && captureQuality.comparableSetup && baselineQualityReady;
-      const currentPhase = currentComparison?.events?.footStrikeToReleaseMilliseconds;
-      const baselinePhase = baseline?.events?.footStrikeToReleaseMilliseconds;
-      const phaseDelta = sameContext && Number.isFinite(currentPhase) && Number.isFinite(baselinePhase)
-        ? currentPhase - baselinePhase : null;
       const eventTime = key => key === null || key === undefined ? null : Number(sepKeyTime(key).toFixed(3));
+      const footTime = sep ? eventTime(sep.foot) : null;
+      const releaseTime = sep ? eventTime(sep.release) : null;
+      const phaseMilliseconds = footTime !== null && releaseTime !== null && releaseTime >= footTime
+        ? Math.round((releaseTime - footTime) * 1000) : null;
       const separationObservation = !sep || sep.foot === null ? '未確認前腳落地事件'
         : sep.footLevel === null ? '落地附近資料不足，不判讀'
         : sep.footLevel >= 0.5 ? '落地附近出現較明顯的骨盆－上軀幹旋轉差趨勢'
@@ -3444,31 +3155,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
             variableFrameRate: !!sourceFrameIndex.variableFrameRate
           } : null
         },
-        athleteContext: {
-          anonymousAthleteSlot: analysisContext.athleteSlot,
-          throwingHand: analysisContext.handedness,
-          ageGroup: analysisContext.ageGroup,
-          cameraView: analysisContext.cameraView,
-          throwingSurface: analysisContext.surface,
-          condition: analysisContext.condition,
-          privacyNote: '未收集姓名、球隊或其他身分資料'
-        },
         analysisReadiness: {
-          contextComplete,
-          missingFields: missingContext,
-          normalConditionForComparison: analysisContext.condition === 'normal',
           poseCoverage
         },
-        captureQuality: {
-          ...captureQuality,
-          coreReady: qualityCoreReady,
-          comparisonReady: qualityCoreReady && captureQuality.comparableSetup,
-          source: 'self-reported-by-user'
-        },
         estimatedEvents: {
-          footStrikeSeconds: sep ? eventTime(sep.foot) : null,
+          footStrikeSeconds: footTime,
           footStrikeSource: sep && sep.foot !== null ? (sep.manualFoot ? 'manual' : 'automatic-estimate') : null,
-          ballReleaseSeconds: sep ? eventTime(sep.release) : null,
+          ballReleaseSeconds: releaseTime,
           ballReleaseSource: sep && sep.release !== null ? (sep.manualRelease ? 'manual' : 'automatic-estimate') : null,
           eventDetectionReason: sep ? sep.eventReason : null,
           throwingWristIndex: sep ? sep.wristIndex : null,
@@ -3485,13 +3178,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           footStrike: sep ? frameMetricsAtKey(sep.foot) : null,
           ballRelease: sep ? frameMetricsAtKey(sep.release) : null
         },
-        comparison: {
-          current: currentComparison,
-          baseline,
-          footStrikeToReleaseDeltaMilliseconds: phaseDelta,
-          validOnlyWhen: 'anonymousAthleteSlot, throwingHand, ageGroup, cameraView, throwingSurface, normal condition, frame rate, and recording setup are comparable; unknown values never count as a match',
-          sameContext
-        },
         limitations: [
           '單一相機與 MediaPipe 姿態估計不能取代 3D 動作捕捉、測力板或醫療評估。',
           '關節角度是 2D 畫面投影；相機角度、遮擋、寬鬆衣物與動態模糊都會影響結果。',
@@ -3499,26 +3185,16 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           '本資料不能用來診斷傷害或預測受傷。疼痛、疲勞或控制力下降時應停止投球並諮詢專業人員。'
         ]
       };
-      const contextLabels = {
-        handedness: { right: '右投', left: '左投', unknown: '未設定' },
-        cameraView: { side: '正側面', 'side-rear': '側後方', rear: '正後方', front: '正前方', unknown: '未設定' },
-        surface: { mound: '投手丘', 'flat-ground': '平地', unknown: '未設定' },
-        condition: { normal: '正常', fatigued: '明顯疲勞', pain: '疼痛／不適', unknown: '未設定' }
-      };
       const eventSourceLabel = source => source === 'manual' ? '人工確認' : source === 'automatic-estimate' ? '系統估計，請人工確認' : '未確認';
       const timeLabel = value => Number.isFinite(value) ? `${value.toFixed(3)} 秒` : '未確認';
-      const phaseLabel = currentComparison?.events?.footStrikeToReleaseMilliseconds;
-      const packageReady = contextComplete && qualityCoreReady && poseCoverage.readyForAutomatedSummary;
-      const readinessLabel = packageReady
-        ? '資料達到目前的自動摘要門檻；仍需教練查看原始畫面。'
-        : '資料尚未達到自動摘要門檻；先補齊設定、確認事件或重拍，不應直接下動作結論。';
+      const readinessLabel = poseCoverage.readyForAutomatedSummary
+        ? '骨架覆蓋與關鍵事件達到目前的摘要門檻；仍需教練查看原始畫面。'
+        : '資料尚未達到摘要門檻；請先確認落地／出手或重拍清楚影片。';
       const coveragePercent = poseCoverage.detectedRatio === null ? null : Math.round(poseCoverage.detectedRatio * 100);
       const coachSummary = `## 給教練的快速摘要\n\n` +
-        `- 匿名球員：${analysisContext.athleteSlot || 'A'}｜年齡層：${analysisContext.ageGroup === 'unknown' ? '未設定' : analysisContext.ageGroup}｜投球手：${contextLabels.handedness[analysisContext.handedness] || '未設定'}\n` +
-        `- 拍攝：${contextLabels.cameraView[analysisContext.cameraView] || '未設定'}｜${contextLabels.surface[analysisContext.surface] || '未設定'}｜當天狀況：${contextLabels.condition[analysisContext.condition] || '未設定'}\n` +
         `- 前腳落地：${timeLabel(data.estimatedEvents.footStrikeSeconds)}（${eventSourceLabel(data.estimatedEvents.footStrikeSource)}）\n` +
         `- 出手：${timeLabel(data.estimatedEvents.ballReleaseSeconds)}（${eventSourceLabel(data.estimatedEvents.ballReleaseSource)}）\n` +
-        `- 落地到出手：${Number.isFinite(phaseLabel) ? `${phaseLabel} 毫秒` : '資料不足'}\n` +
+        `- 落地到出手：${Number.isFinite(phaseMilliseconds) ? `${phaseMilliseconds} 毫秒` : '資料不足'}\n` +
         `- 骨架覆蓋：${poseCoverage.analyzedFrames ? `${coveragePercent}%（${poseCoverage.detectedFrames}/${poseCoverage.analyzedFrames} 個取樣點）` : '尚無完整分析'}\n` +
         `- 單機位旋轉差觀察：${separationObservation}（不是角度、分數、球速、動力傳遞效率或傷害風險）\n` +
         `- 資料判定：${readinessLabel}\n\n` +
@@ -3526,7 +3202,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       return `# PitchFrame 教練／AI 分析包\n\n` +
         `> 目的：協助家長、球員與教練根據同一段影片提出可驗證的觀察。這不是醫療診斷或自動姿勢評分。\n\n` +
         coachSummary +
-        `## 給 AI 的任務\n\n請先檢查資料品質、拍攝視角、年齡層與限制。若 analysisReadiness.contextComplete、captureQuality.coreReady 或 analysisReadiness.poseCoverage.readyForAutomatedSummary 任一不是 true，先說明資料不足並要求補拍或人工確認，不得提出動作修正。資料足夠時，再依「下肢承接 → 骨盆 → 上軀幹 → 手臂 → 出手」的順序分析。每一項建議都要引用具體時間點或數值，區分【觀察】【推論】【待確認】。只有 comparison.sameContext 為 true，且錄影距離、角度與影格率可比較時，才能描述前後變化；否則不得宣稱進步或退步。髖肩分離欄位只是單機位模型的相對趨勢，不得解讀為越大越好、動力傳遞效率、球速或傷害風險。不要只因單一角度或單次投球判定好壞；不要給疼痛診斷。若 condition 是 pain 或 fatigued，先建議停止高強度投球、告知成人並尋求適當專業評估，不要把疲勞或疼痛直接改寫成技術缺陷。最後只提出 1 個最值得優先驗證的觀察線索，以及下次應如何用同角度重拍驗證；不要僅憑本分析包開立加重量、最大強度、增加投球量或強迫增加軀幹扭轉的訓練。若沒有附關鍵畫面或影片，請先要求使用者補上，不要假裝看過。\n\n` +
+        `## 給 AI 的任務\n\n若 analysisReadiness.poseCoverage.readyForAutomatedSummary 不是 true，先要求人工確認事件或重拍，不得提出動作修正。提出任何技術建議前，先向使用者詢問投球手、年齡層、拍攝視角、投手丘／平地，以及當天是否疼痛或明顯疲勞；資訊未補齊就只描述看得到的影格證據。資料足夠時，依「下肢承接 → 骨盆 → 上軀幹 → 手臂 → 出手」順序分析，每項都引用具體時間點或數值，並區分【觀察】【推論】【待確認】。本分析包只描述單次投球，不得宣稱進步或退步。髖肩分離欄位只是單機位模型相對趨勢，不得解讀為越大越好、動力傳遞效率、球速或傷害風險。若使用者回覆有疼痛或明顯疲勞，先建議停止高強度投球、告知成人並尋求適當專業評估。最後只提出 1 個最值得驗證的觀察線索與下次重拍方式；不要僅憑本分析包開立加重量、最大強度、增加投球量或強迫增加軀幹扭轉的訓練。沒有附關鍵畫面或影片時，先要求補上，不要假裝看過。\n\n` +
         `## 結構化資料\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\`\n\n` +
         `## 建議一起提供\n\n- 前腳落地前一格、落地格、出手格的 PNG\n- 原始影片或 PitchFrame 匯出的骨架影片\n- 投手慣用手、年齡層、這次是平地或投手丘\n- 當天是否疼痛或明顯疲勞（若有，先停止投球並尋求專業評估）\n`;
     }

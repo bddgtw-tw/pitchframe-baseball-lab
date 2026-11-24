@@ -18,23 +18,13 @@ const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(match => match[1]);
 const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
 if (duplicates.length) fail(`Duplicate HTML ids: ${duplicates.join(', ')}`);
 
-for (const requiredId of ['videoPlayer', 'scrubber', 'sessionSetup', 'sessionSetupStatus', 'viewSettings', 'moreExports', 'progressSection', 'btnExportPNG', 'btnExportVideo', 'btnExportAI', 'btnShareAI', 'aiHandoffStatus', 'btnShareApp', 'ctxAthleteSlot', 'ctxHandedness', 'ctxAgeGroup', 'ctxCameraView', 'ctxSurface', 'ctxCondition', 'contextReadiness', 'qualityFullBody', 'qualityStable', 'qualitySinglePitch', 'qualityComparable', 'captureQualityBadge', 'analysisCoverage', 'btnMarkFoot', 'btnMarkRelease', 'btnResetEvents', 'btnSaveBaseline', 'btnClearBaselines', 'progressList']) {
+for (const requiredId of ['videoPlayer', 'scrubber', 'viewSettings', 'moreExports', 'btnExportPNG', 'btnExportVideo', 'btnExportAI', 'btnShareAI', 'aiHandoffStatus', 'btnShareApp', 'analysisCoverage', 'btnMarkFoot', 'btnMarkRelease', 'btnResetEvents']) {
   if (!ids.includes(requiredId)) fail(`Required control is missing: ${requiredId}`);
-}
-for (const requiredBehavior of [
-  "source: 'self-reported-by-user'",
-  'baselineQualityReady',
-  'contextComparable && qualityCoreReady && captureQuality.comparableSetup && baselineQualityReady',
-  "analysisContext.handedness !== 'unknown'",
-  "analysisContext.condition === 'normal'",
-  'unknown values never count as a match'
-]) {
-  if (!html.includes(requiredBehavior)) fail(`Capture-quality safeguard is missing: ${requiredBehavior}`);
 }
 for (const qualityBehavior of ['analysisCoverageSnapshot', 'operationalThreshold = 0.8', 'readyForAutomatedSummary', '80% 是 PitchFrame 的保守操作門檻']) {
   if (!html.includes(qualityBehavior)) fail(`Pose coverage safeguard is missing: ${qualityBehavior}`);
 }
-for (const simplificationBehavior of ['sessionSetupComplete()', '分享分析給教練／AI']) {
+for (const simplificationBehavior of ['匯入投球影片', '分享分析給教練／AI']) {
   if (!html.includes(simplificationBehavior)) fail(`Progressive disclosure behavior is missing: ${simplificationBehavior}`);
 }
 for (const sharingBehavior of ['免費免登入：用手機逐格確認前腳落地與出手', "btnShareApp.textContent = '分享工具'"]) {
@@ -49,7 +39,7 @@ for (const samplingBehavior of ['const ANALYSIS_SAMPLE_FPS = 8', 'sampledKeys: f
 for (const eventSyncBehavior of ['function currentManualEventKey()', 'poseMatchesFrame() ? currentPoseStamp : frameStamp()', 'manualRelease = currentManualEventKey()', 'sepCache = null; renderStage(); renderAnalysisCoverage()']) {
   if (!html.includes(eventSyncBehavior)) fail(`Manual event/frame synchronization is missing: ${eventSyncBehavior}`);
 }
-for (const blockingBehavior of ['src="./tailwind.js"', "addEventListener('DOMContentLoaded', initMediaPipe)", 'user-scalable=no', 'btnInstallApp', 'beforeinstallprompt', 'btnSmooth', 'blendCanvas', 'sessionSetup.open = true', 'btnPrev5', 'btnNext5', 'data-speed="0.1"', 'data-speed="0.75"', 'btnCapture', 'btnChoose', 'telemetryGrid', 'currentFrame: {']) {
+for (const blockingBehavior of ['src="./tailwind.js"', "addEventListener('DOMContentLoaded', initMediaPipe)", 'user-scalable=no', 'btnInstallApp', 'beforeinstallprompt', 'btnSmooth', 'blendCanvas', 'sessionSetup', 'btnPrev5', 'btnNext5', 'data-speed="0.1"', 'data-speed="0.75"', 'btnCapture', 'btnChoose', 'telemetryGrid', 'currentFrame: {', 'ctxHandedness', 'qualityFullBody', 'progressSection', 'pf-progress-history', 'athleteContext:', 'captureQuality:', 'comparison: {']) {
   if (html.includes(blockingBehavior)) fail(`Blocking or inaccessible startup behavior remains: ${blockingBehavior}`);
 }
 for (const scienceGuard of ['不能據此要求孩子增加扭轉', '不得解讀為越大越好', 'PMC9532595', 'pitchframe-analysis-package-v2', 'validatedPhysicalMeasurement: false']) {
@@ -62,6 +52,11 @@ for (const methodologyClaim of ['validatedPhysicalMeasurement: false', '不把�
   if (!science.includes(methodologyClaim)) fail(`Science methodology is missing: ${methodologyClaim}`);
 }
 if (analysisSchema.properties?.schema?.const !== 'pitchframe-analysis-package-v2') fail('AI package schema version is incorrect.');
+for (const obsoleteField of ['athleteContext', 'captureQuality', 'comparison']) {
+  if (analysisSchema.required?.includes(obsoleteField) || analysisSchema.properties?.[obsoleteField]) {
+    fail(`Obsolete pre-analysis form data remains in the AI package schema: ${obsoleteField}`);
+  }
+}
 if (analysisSchema.properties?.estimatedEvents?.properties?.separationSignal?.properties?.validatedPhysicalMeasurement?.const !== false) {
   fail('AI package schema must mark the separation signal as an unvalidated physical measurement.');
 }
@@ -76,7 +71,7 @@ if (analysisSchema.properties?.analysisReadiness?.properties?.poseCoverage?.prop
 for (const pilotGate of ['5 分鐘內完成', '至少收集 3 位家長與 2 位教練', '可以刪除或收起']) {
   if (!pilot.includes(pilotGate)) fail(`Parent/coach validation gate is missing: ${pilotGate}`);
 }
-for (const handoffBehavior of ['給教練的快速摘要', 'contextComplete && qualityCoreReady && poseCoverage.readyForAutomatedSummary', 'navigator.canShare({ files: [file] })', 'navigator.clipboard.writeText(content)', "err.name === 'AbortError'"]) {
+for (const handoffBehavior of ['給教練的快速摘要', 'poseCoverage.readyForAutomatedSummary', '先向使用者詢問投球手、年齡層、拍攝視角', 'navigator.canShare({ files: [file] })', 'navigator.clipboard.writeText(content)', "err.name === 'AbortError'"]) {
   if (!html.includes(handoffBehavior)) fail(`AI handoff behavior is missing: ${handoffBehavior}`);
 }
 

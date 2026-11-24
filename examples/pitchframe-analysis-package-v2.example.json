@@ -12,19 +12,7 @@
       "variableFrameRate": false
     }
   },
-  "athleteContext": {
-    "anonymousAthleteSlot": "A",
-    "throwingHand": "right",
-    "ageGroup": "u12",
-    "cameraView": "rear-side",
-    "throwingSurface": "flat-ground",
-    "condition": "normal",
-    "privacyNote": "未收集姓名、球隊或其他身分資料"
-  },
   "analysisReadiness": {
-    "contextComplete": true,
-    "missingFields": [],
-    "normalConditionForComparison": true,
     "poseCoverage": {
       "analysisComplete": true,
       "totalFrames": 41,
@@ -40,15 +28,6 @@
       "thresholdNote": "80% 是 PitchFrame 的保守操作門檻，不是經臨床或生物力學研究驗證的準確度標準。"
     }
   },
-  "captureQuality": {
-    "fullBodyVisible": true,
-    "cameraStable": true,
-    "singleUneditedPitch": true,
-    "comparableSetup": false,
-    "coreReady": true,
-    "comparisonReady": false,
-    "source": "self-reported-by-user"
-  },
   "estimatedEvents": {
     "footStrikeSeconds": 1.15,
     "footStrikeSource": "manual",
@@ -63,13 +42,6 @@
     }
   },
   "currentEventMetrics": {},
-  "comparison": {
-    "current": {},
-    "baseline": null,
-    "footStrikeToReleaseDeltaMilliseconds": null,
-    "validOnlyWhen": "anonymousAthleteSlot, throwingHand, ageGroup, cameraView, throwingSurface, normal condition, frame rate, and recording setup are comparable; unknown values never count as a match",
-    "sameContext": false
-  },
   "limitations": [
     "單一相機與姿態估計不能取代 3D 動作捕捉、測力板或醫療評估。",
     "本資料不能用來診斷傷害或預測受傷。"

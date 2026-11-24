@@ -8,11 +8,8 @@
     "schema",
     "createdAt",
     "source",
-    "athleteContext",
     "analysisReadiness",
-    "captureQuality",
     "estimatedEvents",
-    "comparison",
     "limitations"
   ],
   "properties": {
@@ -36,26 +33,10 @@
         }
       }
     },
-    "athleteContext": {
-      "type": "object",
-      "required": ["anonymousAthleteSlot", "throwingHand", "ageGroup", "cameraView", "throwingSurface", "condition", "privacyNote"],
-      "properties": {
-        "anonymousAthleteSlot": { "type": "string" },
-        "throwingHand": { "type": "string" },
-        "ageGroup": { "type": "string" },
-        "cameraView": { "type": "string" },
-        "throwingSurface": { "type": "string" },
-        "condition": { "type": "string" },
-        "privacyNote": { "type": "string" }
-      }
-    },
     "analysisReadiness": {
       "type": "object",
-      "required": ["contextComplete", "missingFields", "normalConditionForComparison", "poseCoverage"],
+      "required": ["poseCoverage"],
       "properties": {
-        "contextComplete": { "type": "boolean" },
-        "missingFields": { "type": "array", "items": { "type": "string" } },
-        "normalConditionForComparison": { "type": "boolean" },
         "poseCoverage": {
           "type": "object",
           "required": ["analysisComplete", "totalSampledFrames", "analyzedFrames", "detectedFrames", "detectedRatio", "samplingRateFps", "operationalThreshold", "eventsConfirmed", "criticalFramesDetected", "readyForAutomatedSummary", "thresholdNote"],
@@ -75,19 +56,6 @@
           },
           "additionalProperties": true
         }
-      }
-    },
-    "captureQuality": {
-      "type": "object",
-      "required": ["fullBodyVisible", "cameraStable", "singleUneditedPitch", "comparableSetup", "coreReady", "comparisonReady", "source"],
-      "properties": {
-        "fullBodyVisible": { "type": "boolean" },
-        "cameraStable": { "type": "boolean" },
-        "singleUneditedPitch": { "type": "boolean" },
-        "comparableSetup": { "type": "boolean" },
-        "coreReady": { "type": "boolean" },
-        "comparisonReady": { "type": "boolean" },
-        "source": { "const": "self-reported-by-user" }
       }
     },
     "estimatedEvents": {
@@ -113,17 +81,6 @@
       "additionalProperties": true
     },
     "currentEventMetrics": { "type": "object" },
-    "comparison": {
-      "type": "object",
-      "required": ["current", "baseline", "footStrikeToReleaseDeltaMilliseconds", "validOnlyWhen", "sameContext"],
-      "properties": {
-        "current": { "type": ["object", "null"] },
-        "baseline": { "type": ["object", "null"] },
-        "footStrikeToReleaseDeltaMilliseconds": { "type": ["number", "null"] },
-        "validOnlyWhen": { "type": "string" },
-        "sameContext": { "type": "boolean" }
-      }
-    },
     "limitations": {
       "type": "array",
       "minItems": 1,
