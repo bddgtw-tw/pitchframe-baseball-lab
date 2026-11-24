@@ -2009,36 +2009,48 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
     function sepKeyTime(key) { return sourceFrameIndex ? sourceFrameIndex.seekTime(key) : key * fallbackFrameDuration; }
 
-    // 前腳落地：跨步腳（水平移動最多的腳踝）快速前移後停下的第一格；出手：之後投球手腕最快的那一格
+    // 前腳落地：「最先」大幅水平移動的腳踝就是跨步腳（後腳在出手後的跟進也會大幅移動，
+    // 所以不能用移動總量判斷），它快速前移後停下的第一格就是落地；出手：之後投球手腕最快的那一格
     function detectEvents(keys) {
       const W = video.videoWidth || 1, H = video.videoHeight || 1;
       const series = idx => keys.map(k => { const lm = poseCache.get(k); const p = lm && lm[idx];
         return p && credibleBodyPoint(p) ? { x: p.x * W, y: p.y * H } : null; });
-      const smoothX = arr => arr.map((p, i) => { const win = arr.slice(Math.max(0, i - 2), i + 3).filter(Boolean);
+      const smoothX = arr => arr.map((p, i) => { const win = arr.slice(Math.max(0, i - 1), i + 2).filter(Boolean);
         return p && win.length ? win.reduce((a, q) => a + q.x, 0) / win.length : null; });
-      const left = smoothX(series(27)), right = smoothX(series(28));
-      const range = a => { const v = a.filter(x => x !== null); return v.length > 5 ? Math.max(...v) - Math.min(...v) : 0; };
-      const strideLeft = range(left) >= range(right);
-      const xs = strideLeft ? left : right;
-      if (range(xs) < Math.max(W, H) * 0.03) return { foot: null, release: null, strideLeft };
-      const vel = xs.map((x, i) => (i && x !== null && xs[i - 1] !== null) ? Math.abs(x - xs[i - 1]) : 0);
-      let peak = 0; vel.forEach((v, i) => { if (v > vel[peak]) peak = i; });
+      const velOf = xs => xs.map((x, i) => (i && x !== null && xs[i - 1] !== null) ? Math.abs(x - xs[i - 1]) : 0);
+      const sides = [27, 28].map(idx => { const xs = smoothX(series(idx)); return { idx, xs, vel: velOf(xs) }; });
+      const globalPeak = Math.max(...sides.map(sd => Math.max(0, ...sd.vel)));
+      if (!(globalPeak > Math.max(W, H) * 0.006)) return { foot: null, release: null };
+      const moveTh = globalPeak * 0.5;
+      sides.forEach(sd => { sd.onset = sd.vel.findIndex(v => v >= moveTh); });
+      const moving = sides.filter(sd => sd.onset >= 0).sort((p, q) => p.onset - q.onset);
+      if (!moving.length) return { foot: null, release: null };
+      const stride = moving[0];
+      // 跨步這一段的峰值：從起動往後，直到速度掉下來
+      let peak = stride.onset;
+      for (let i = stride.onset; i < stride.vel.length && stride.vel[i] >= moveTh * 0.4; i++) if (stride.vel[i] > stride.vel[peak]) peak = i;
       let foot = null;
-      for (let i = peak + 1; i < vel.length - 1; i++) {
-        if (xs[i] !== null && vel[i] < vel[peak] * 0.2 && vel[i + 1] < vel[peak] * 0.2) { foot = i; break; }
+      for (let i = peak + 1; i < stride.vel.length - 1; i++) {
+        if (stride.xs[i] !== null && stride.vel[i] < stride.vel[peak] * 0.2 && stride.vel[i + 1] < stride.vel[peak] * 0.2) { foot = i; break; }
       }
       let release = null;
       if (foot !== null) {
-        const wrist = series(strideLeft ? 16 : 15);
+        // 出手：落地後 0.5 秒內，投球手腕伸到「最靠近目標方向」的那一格（目標方向＝跨步方向）。
+        // 揮臂那幾格常常糊掉、可信度低，所以這裡只要求座標存在、可信度 ≥ 0.2。
+        const wristIdx = stride.idx === 27 ? 16 : 15; // 跨步腳是左腳時，投球手是右手，反之亦然
+        const startX = stride.xs[stride.onset], footX = stride.xs[foot];
+        const dir = (footX !== null && startX !== null && footX < startX) ? -1 : 1;
         const fps = sourceFrameIndex && sourceFrameIndex.fps ? sourceFrameIndex.fps : 30;
-        const end = Math.min(keys.length - 1, foot + Math.round(fps * 0.6));
-        let best = 0;
+        const end = Math.min(keys.length - 1, foot + Math.round(fps * 0.5));
+        let best = -Infinity;
         for (let i = foot + 1; i <= end; i++) {
-          const a = wrist[i], b = wrist[i - 1];
-          if (a && b) { const sp = Math.hypot(a.x - b.x, a.y - b.y); if (sp > best) { best = sp; release = i; } }
+          const lm = poseCache.get(keys[i]); const p = lm && lm[wristIdx];
+          if (!p || !Number.isFinite(p.x) || !(p.visibility >= 0.2)) continue;
+          const reach = dir * p.x * W;
+          if (reach > best) { best = reach; release = i; }
         }
       }
-      return { foot: foot === null ? null : keys[foot], release: release === null ? null : keys[release], strideLeft };
+      return { foot: foot === null ? null : keys[foot], release: release === null ? null : keys[release] };
     }
 
     function getSeparation() {
