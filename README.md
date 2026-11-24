@@ -1,133 +1,93 @@
 # PitchFrame ⚾
 
-[![Verify PitchFrame](https://github.com/bddgtw-tw/pitchframe-baseball-lab/actions/workflows/verify.yml/badge.svg)](https://github.com/bddgtw-tw/pitchframe-baseball-lab/actions/workflows/verify.yml)
+[![Verify PitchFrame](https://github.com/bddgtw-tw/pitchframe-baseball-lab/actions/workflows/verify.yml/badge.svg)](https://github.com/bddgtw-tw/pitchframe-baseball-lab/actions/workflows/verify.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-> 把一段投球影片，變成家長、球員與教練可以一起討論的逐格證據。
+**拍一球，看懂孩子的投球。** 手機拍下孩子投球，PitchFrame 自動畫出骨架、找出前腳落地與出手，再做成一張圖讓你傳給教練。免費、免登入，影片不會上傳。
 
-[立即使用 PitchFrame](https://bddgtw-tw.github.io/pitchframe-baseball-lab/) ・ [回報問題](https://github.com/bddgtw-tw/pitchframe-baseball-lab/issues)
+### 👉 [立即使用（手機打開就能用）](https://bddgtw-tw.github.io/pitchframe-baseball-lab/)
 
-家長或教練願意幫忙實測？請完成這個 [5 分鐘驗證任務](PILOT.md)，不需要也不應公開兒童影片。
+<p align="center">
+  <img src="assets/demo.gif" alt="PitchFrame 操作示範：拍攝影片、點選球員、等待分析、查看前腳落地與出手，最後分享結果圖" width="300">
+</p>
 
-![PitchFrame 公開版介面：精簡的家長操作流程、逐格播放器與本機 AI 分析](assets/pitchframe-preview.png)
+<sub>示範畫面使用公開授權的測試影片。</sub>
 
-PitchFrame 是一個免費、免登入、可離線使用的少棒投球觀察 PWA。影片在瀏覽器本機分析，不會上傳到伺服器。你可以逐格播放、疊加姿態骨架與關節角度、觀察前腳落地附近的髖肩分離趨勢，再匯出畫面、分析影片或一份可交給 AI／教練討論的結構化分析包。
+## 三步驟
 
-如果這個工具幫你和孩子進行了一次更具體的動作討論，歡迎在 GitHub 按下 **Star**。Star 會讓更多少棒家庭找到它，也讓我們知道值得繼續維護。
+| | 你要做的事 | PitchFrame 做的事 |
+|---|---|---|
+| **1. 拍攝** | 手機固定在投手側面或側後方，全身入鏡，拍一球（5–10 秒）。 | 影片只在你的手機上讀取，不上傳。 |
+| **2. 分析** | 在畫面上點一下你的孩子。 | 逐格畫出骨架與關節角度，自動找出前腳落地與出手。 |
+| **3. 結果** | 點「前腳落地」「出手」跳過去看；不對就逐格後按「改成目前這格」。 | 按「分享結果圖給教練」，把兩個關鍵格並排成一張圖，用 LINE 等 App 傳出。 |
 
-## 它真正解決什麼
+<p align="center">
+  <img src="assets/result-card.jpg" alt="結果圖範例：前腳落地與出手兩格，畫上骨架與關節角度" width="360">
+</p>
 
-手機錄影常停在「看起來哪裡怪怪的」。PitchFrame 把觀察流程固定下來：
+## 為什麼家長會想用
 
-1. 用同一角度拍攝 5–10 秒，保留完整身體與出手。
-2. 逐格確認前腳落地與出手，而不是只看正常速度播放。
-3. 用骨架、角度和手動標註指出具體影格。
-4. 匯出證據交給教練或 AI，要求建議引用時間點並標示不確定性。
-5. 把具體影格交給教練，再依教練要求重拍驗證。
+- **不用猜「哪裡怪怪的」**：正常速度看不出來的瞬間，用逐格和慢動作停在同一格討論。
+- **教練一看就懂**：傳出去的是一張畫好骨架的圖，不是一堆數字或檔案。
+- **球場邊就能用**：第一次使用會下載約 24 MB 的 AI 模型，之後沒有網路也能分析。
+- **安心**：免費、免登入、沒有廣告，影片不離開手機。
 
-PitchFrame 的價值不是自動打分，而是讓「觀察 → 建議 → 練習 → 重拍驗證」可以重複。
+如果它幫你和孩子進行了一次更具體的討論，請幫忙按一顆 ⭐ **Star**，讓更多少棒家庭找到它。
 
-介面只保留「拍攝／選片 → 分析 → 產出結果」。顯示切換、標註與其他下載格式收在選用區。
+## 拍攝小提示
 
-想檢查每項功能的證據、限制與 AI 資料契約，請閱讀 [科學方法與安全界線](SCIENCE.md)。
+- 手機固定（腳架或請人拿穩），從投手的側面或側後方拍。
+- 頭到腳、出手的位置都要在畫面裡；光線充足，避免逆光。
+- 每次用相同位置與距離拍，前後比較才有意義。
 
-外部 AI 或開發工具可用 [`pitchframe-analysis-package-v2.schema.json`](schemas/pitchframe-analysis-package-v2.schema.json) 驗證分析包中的結構化 JSON，並參考[匿名範例](examples/pitchframe-analysis-package-v2.example.json)；Schema 明確禁止把旋轉差訊號當成已驗證的物理量。
+## 這不是什麼
 
-## 主要功能
+PitchFrame 是觀察與溝通工具，不是評分系統，也不是醫療產品。
 
-- 真實 MP4 影格索引與逐格操作，支援可變幀率來源的保守處理。
-- MediaPipe Pose 本機推論；沒有辨識到人物時不捏造骨架。
-- 整段分析以 8 fps 取樣降低等待時間；播放或逐格到未取樣影格時再即時補分析，不改變原始影片的逐格索引。
-- 多人畫面可點選要追蹤的球員。
-- 關節角度、軀幹傾角、前腳落地與出手事件估計；數值預設不佔用家長主流程。
-- 前腳落地與出手點都可逐格人工校正，分析包會保留「人工／自動估計」來源。
-- 髖肩分離趨勢視覺化，並清楚標示單機位 AI 的限制。
-- 選用的畫線、箭頭、圈選與文字註記。
-- 主操作可直接分享給教練／AI；PNG、骨架分析影片與分析包下載收在選用區。
-- PWA 安裝與離線使用；首頁不先載入 AI，選片後才下載模型。模型與程式可快取，使用者影片不進快取。
+- 手機單一角度的 2D 骨架，不等於實驗室的 3D 動作捕捉；角度只供參考，請和孩子自己的前後影片比較。
+- 自動找到的落地與出手是估計，請逐格確認。
+- 不能診斷或預測受傷。若孩子有疼痛、疲勞或控制力突然變差，請停止投球並尋求專業協助。
 
-## 家長快速開始
-
-### 拍攝
-
-- 手機固定，優先使用側後方視角。
-- 全身、雙腳、投手丘／地面與出手位置都要留在畫面內。
-- 光線充足，避免逆光、寬鬆衣物遮住肩髖與嚴重動態模糊。
-- 每次盡量使用相同位置、方向與距離，才有比較價值。
-
-### 分析
-
-1. 開啟網站，選擇或拍攝影片。
-2. 點一下要分析的球員；畫面只有一人時可直接選整張畫面。
-3. 等待分析完成，人工確認「前腳落地」與「出手」；不正確就逐格定位後手動標記。
-4. 按「分享分析給教練／AI」，或從選用區下載 PNG、骨架影片與分析包。
-
-完成分析後會顯示實際骨架辨識覆蓋率。PitchFrame 暫以 80% 加上落地／出手格都有骨架，作為是否允許 AI 自動摘要的保守操作門檻；這不是臨床或生物力學研究驗證的準確度標準。
-
-### 離線使用
-
-不需要安裝 App。首次選擇影片時，本站才會載入約 24 MB 的模型與程式；成功載入後會保留在裝置快取中，之後從瀏覽器重新開啟網站，也能在球場沒有網路時使用。
-
-## 科學與安全界線
-
-投球是由下肢、骨盆、軀幹、上肢到球的連續動作。研究常用前腳落地、最大肩外旋與出手等事件描述動作，也會觀察骨盆與上軀幹的旋轉差和先後順序。PitchFrame 把這些概念轉成容易回看的影格與趨勢，但它仍有明確限制：
-
-- 單一相機的 2D 投影與 AI 深度估計，不等於實驗室 3D 動作捕捉。
-- 相機角度、遮擋、衣物、影格率與模糊都會改變估計結果。
-- 門檻用來穩定視覺呈現，不是適用所有年齡的「標準答案」。
-- 髖肩分離不是越大越好，也不能單獨代表球速、效率或受傷風險。
-- 少棒動力傳遞研究通常使用多機位 3D 動作捕捉與測力板；PitchFrame 不宣稱從手機影片量到關節功率、能量流或精準旋轉速度。
-- 本工具不能診斷傷害或預測受傷。若有疼痛、疲勞、速度／準度突然下降或動作控制改變，應停止投球並尋求教練與醫療專業意見。
-
-參考閱讀：
-
-- [Baseball Pitching Biomechanics in Relation to Injury Risk and Performance](https://pmc.ncbi.nlm.nih.gov/articles/PMC3445126/)
-- [Hip Flexibility and Pitching Biomechanics in Adolescent Baseball Pitchers](https://pmc.ncbi.nlm.nih.gov/articles/PMC9528701/)
-- [Lower Body Energy Generation, Absorption, and Transfer in Youth Baseball Pitchers](https://pmc.ncbi.nlm.nih.gov/articles/PMC9532595/)
-- [Kinematic Parameters Predictive of Pitch Velocity: Systematic Review](https://pmc.ncbi.nlm.nih.gov/articles/PMC10687953/)
-- [ASMI Position Statement for Adolescent Baseball Pitchers](https://asmi.org/position-statement-for-adolescent-baseball-pitchers/)
+方法、限制與參考文獻請見 [科學方法與安全界線](SCIENCE.md)。
 
 ## 隱私
 
-- 影片透過 `blob:` URL 由瀏覽器本機讀取，沒有影片上傳端點。
-- Service Worker 只快取本站程式、模型與圖示，不攔截或保存使用者影片。
-- AI 教練分析包不含原始影片，也不會自動傳給任何 AI 服務。
-- GitHub Pages 仍可能接收一般網頁請求與連線資訊；本機分析不代表完全匿名。
+- 影片透過瀏覽器本機讀取（`blob:` URL），沒有任何上傳端點。
+- Service Worker 只快取本站程式、模型與圖示，不保存使用者影片。
+- 結果圖與 AI 文字摘要只在你按下分享時才產生，傳給誰由你決定。
+- GitHub Pages 仍會收到一般的網頁連線資訊；本機分析不代表完全匿名。
 
-## 開發與驗證
+## 給 AI 的文字摘要
 
-本專案是無建置步驟的靜態網站。所有 runtime assets 都在 repo 根目錄並使用相對路徑；`file://` 不支援，請用本機 HTTP server：
+結果頁下方的「給 AI 的文字摘要」會產生一份 Markdown，內含前腳落地與出手的時間點與來源（人工／自動）、骨架覆蓋率、限制說明，以及要求 AI 先詢問年齡、疼痛等資訊再提出建議的指示。不含原始影片。
+
+外部工具可用 [`pitchframe-analysis-package-v2.schema.json`](schemas/pitchframe-analysis-package-v2.schema.json) 驗證其中的結構化 JSON，並參考 [匿名範例](examples/pitchframe-analysis-package-v2.example.json)。Schema 明確禁止把旋轉差訊號當成已驗證的物理量。
+
+## 開發
+
+無建置步驟的靜態網站：一個 `index.html`，加上同源的 MediaPipe Pose 模型檔。`file://` 無法使用，請開本機 HTTP server：
 
 ```bash
 python -m http.server 8080
+# 開啟 http://localhost:8080/
 ```
 
-然後開啟 `http://localhost:8080/`。提交變更前至少確認：
+提交前執行：
 
 ```bash
 node scripts/verify.mjs
 node tests/events.test.cjs
 ```
 
-- 首次載入與離線重開可用。
-- iPhone／Android 直式與橫式版面可操作。
-- 選片、選人、逐格、手動落地點、三種匯出皆可用。
-- 沒有人物、遮擋或低可信度時不產生虛構結論。
-- 瀏覽器 console 沒有新增錯誤。
+並確認：手機直式與橫式都能完成「選片 → 點選孩子 → 逐格 → 標記落地／出手 → 分享結果圖」，console 沒有新增錯誤，`sw.js` 的 `VERSION` 已更新。
 
-2026-11-24 已用全新 Chrome 瀏覽器環境做過公開站端到端驗證：先連網分析一支 5 秒公開授權測試片，接著切斷網路、重新載入 PWA 並再次選片分析。離線階段仍完成 41/41 個取樣點（100% 骨架覆蓋），所需 TFLite、WASM 與模型資料皆由 Service Worker 快取提供，沒有 HTTP、console 或頁面錯誤。這項結果只證明該測試環境的離線流程；不同手機與瀏覽器仍列入實機測試範圍。
+設計原則只有一條：**主流程只有拍攝、分析、結果三步。** 新增任何按鈕前，先回答它是否幫家長更快、更準地看懂這一球；答不出來就不加。詳見 [CONTRIBUTING.md](CONTRIBUTING.md) 與 [GOALS.md](GOALS.md)。
 
-## Roadmap
+想幫忙實測？請看 [5 分鐘家長／教練實測任務](PILOT.md)。請勿公開兒童影片或可識別資訊。
 
-- 用 3–5 位家長與教練完成真實影片任務測試，記錄完成率、卡點與分享內容是否可採用。
-- 建立取得同意、可重現的測試影片與人工事件標記資料集，量化落地／出手候選點誤差。
-- 持續做 `pitchframe-analysis-package-v2` 向後相容性測試，避免外部 AI 整合因更新中斷。
-- 只有在使用測試證明需要時，才加入同機位雙影片並排；不以增加功能數為目標。
+## 授權
 
-歡迎用 [Issues](https://github.com/bddgtw-tw/pitchframe-baseball-lab/issues) 提供可重現案例。請勿上傳含兒童身分資訊或未取得同意的影片；描述瀏覽器、手機型號、拍攝方向、預期與實際結果即可。
+PitchFrame 的程式碼採 [MIT License](LICENSE)：可以自由使用、修改與分享，只要保留版權與授權聲明。
 
-## Third-party components
+第三方元件依各自授權使用：
 
 - MediaPipe Pose `0.5.1675469404`，Apache 2.0；見 `pose-LICENSE-Apache-2.0.txt`。
-- Tailwind CSS browser runtime `3.4.17`；見 `tailwind-LICENSE.txt`。
-
-目前 repo 尚未宣告整體專案授權。第三方元件仍依各自授權使用；若要重用本專案程式，請先向維護者確認。
