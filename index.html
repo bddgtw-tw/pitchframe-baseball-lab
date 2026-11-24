@@ -3542,7 +3542,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     btnShareApp.addEventListener('click', async () => {
       const shareData = {
         title: 'PitchFrame 少棒投球逐格分析',
-        text: '用手機逐格看孩子的投球，影片只在自己的裝置分析。',
+        text: '免費免登入：用手機逐格確認前腳落地與出手，再把具體影格傳給教練討論。影片只在自己的裝置分析。',
         url: 'https://bddgtw-tw.github.io/pitchframe-baseball-lab/'
       };
       try {
@@ -3550,7 +3550,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         else {
           await navigator.clipboard.writeText(`${shareData.text}\n${shareData.url}`);
           btnShareApp.textContent = '連結已複製';
-          setTimeout(() => { btnShareApp.textContent = '分享給家長'; }, 1800);
+          setTimeout(() => { btnShareApp.textContent = '分享工具'; }, 1800);
         }
       } catch (err) {
         if (err && err.name !== 'AbortError') alert(`無法開啟分享功能，請複製網址：${shareData.url}`);

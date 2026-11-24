@@ -37,6 +37,9 @@ for (const qualityBehavior of ['analysisCoverageSnapshot', 'operationalThreshold
 for (const simplificationBehavior of ['sessionSetupComplete()', 'sessionSetup.open = true', '分享分析給教練／AI']) {
   if (!html.includes(simplificationBehavior)) fail(`Progressive disclosure behavior is missing: ${simplificationBehavior}`);
 }
+for (const sharingBehavior of ['免費免登入：用手機逐格確認前腳落地與出手', "btnShareApp.textContent = '分享工具'"]) {
+  if (!html.includes(sharingBehavior)) fail(`Parent sharing behavior is missing: ${sharingBehavior}`);
+}
 for (const scienceGuard of ['不能據此要求孩子增加扭轉', '不得解讀為越大越好', 'PMC9532595', 'pitchframe-analysis-package-v2', 'validatedPhysicalMeasurement: false']) {
   if (!html.includes(scienceGuard)) fail(`Sports-science safeguard is missing: ${scienceGuard}`);
 }
