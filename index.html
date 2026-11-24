@@ -574,10 +574,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         <section id="sepPanel" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col gap-2.5 shadow-lg" aria-label="髖肩分離">
           <h2 class="operation-heading">髖肩分離趨勢（單機位 AI 估計）</h2>
           <div id="sepVerdict" role="status" class="rounded-xl border border-slate-700 p-2.5 text-sm leading-relaxed">等骨架分析完成…</div>
-          <div class="grid grid-cols-3 gap-1.5">
+          <div class="grid grid-cols-2 gap-1.5">
             <button id="btnJumpFoot" class="bg-slate-100 text-slate-950 text-xs font-bold px-2 py-2.5 rounded-lg active:scale-95 transition">跳到前腳落地</button>
             <button id="btnMarkFoot" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2 py-2.5 rounded-lg border border-slate-700 active:scale-95 transition">這格設為落地</button>
-            <button id="btnJumpRelease" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2 py-2.5 rounded-lg border border-slate-700 active:scale-95 transition">跳到出手</button>
+            <button id="btnJumpRelease" class="bg-slate-100 text-slate-950 text-xs font-bold px-2 py-2.5 rounded-lg active:scale-95 transition">跳到出手</button>
+            <button id="btnMarkRelease" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2 py-2.5 rounded-lg border border-slate-700 active:scale-95 transition">這格設為出手</button>
+            <button id="btnResetEvents" class="col-span-2 bg-slate-950 hover:bg-slate-800 text-slate-400 text-[11px] px-2 py-2 rounded-lg border border-slate-800 active:scale-95 transition">清除人工標記，恢復自動估計</button>
           </div>
           <details class="text-xs text-slate-300 leading-relaxed">
             <summary class="cursor-pointer text-slate-200 font-semibold">這在看什麼？（運動科學來源）</summary>
@@ -2110,7 +2112,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const SEP_LOW = [255, 255, 255], SEP_HIGH = [239, 68, 68], SEP_ALPHA = 0.85; // 白 → 紅，透明度固定；以相乘疊在影片上，白色＝不變，紅色＝染紅但球員仍清楚
     let separationEnabled = true;
     try { separationEnabled = localStorage.getItem('pf-separation') !== '0'; } catch (_) {}
-    let sepCache = null, manualFoot = null;
+    let sepCache = null, manualFoot = null, manualRelease = null;
     const btnSeparation = document.getElementById('btnSeparation');
     const separationStatusText = document.getElementById('separationStatusText');
     const sepPanel = document.getElementById('sepPanel');
@@ -2119,7 +2121,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const sepStripRow = document.getElementById('sepStripRow');
     const sepStrip = document.getElementById('sepStrip');
 
-    function resetSeparation() { sepCache = null; manualFoot = null; }
+    function resetSeparation() { sepCache = null; manualFoot = null; manualRelease = null; }
     const v3 = {
       sub: (a, b) => [a.x - b.x, a.y - b.y, a.z - b.z],
       mid: (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 }),
@@ -2169,7 +2171,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     function getSeparation() {
       if (!separationEnabled || !video.videoWidth) return null;
-      const stamp = `${sourceGeneration}|${trackJob ? trackJob.done : 0}|${poseCache.size}|${manualFoot}`;
+      const stamp = `${sourceGeneration}|${trackJob ? trackJob.done : 0}|${poseCache.size}|${manualFoot}|${manualRelease}`;
       if (sepCache && sepCache.stamp === stamp) return sepCache;
       const keys = [...worldCache.keys()].filter(k => poseCache.has(k)).sort((a, b) => a - b);
       const raw = keys.map(k => torsoTwist(worldCache.get(k)));
@@ -2181,12 +2183,14 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       keys.forEach((k, i) => { level.set(k, sepLevel(deg[i])); if (raw[i]) signed.set(k, raw[i].signed); });
       const ev = trackComplete() || !hasTargetChoice() ? detectEvents(keys) : { foot: null, release: null };
       const foot = manualFoot !== null ? manualFoot : ev.foot;
+      const release = manualRelease !== null ? manualRelease : ev.release;
       let footLevel = null;
       if (foot !== null) {
         const near = [foot - 1, foot, foot + 1].map(k => level.get(k)).filter(v => v !== null && v !== undefined);
         footLevel = near.length ? median(near) : null;
       }
-      sepCache = { stamp, keys, level, signed, foot, release: ev.release, footLevel, manual: manualFoot !== null,
+      sepCache = { stamp, keys, level, signed, foot, release, footLevel, manual: manualFoot !== null,
+        manualFoot: manualFoot !== null, manualRelease: manualRelease !== null,
         strideAnkleIndex: ev.strideAnkleIndex ?? null, wristIndex: ev.wristIndex ?? null, wristSource: ev.wristSource ?? null, eventReason: ev.reason || null };
       drawSeparationStrip();
       updateSeparationPanel();
@@ -2206,7 +2210,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       else if (sepCache.footLevel >= 0.5) { border = '#ef4444';
         html = '<b>前腳落地：髖已轉開、肩還留在後面</b><br><span class="text-slate-400">有做到髖肩分離。接著看熱度帶：紅色應該在落地前後出現，出手前退回白色。</span>'; }
       else html = '<b>前腳落地：髖肩幾乎沒有拉開</b><br><span class="text-slate-400">可能是髖還沒開，或肩膀已經跟著開了。逐格看落地前後幾格，比較胸口和皮帶扣的朝向。</span>';
-      if (done && sepCache.foot !== null) html += `<br><span class="text-slate-500 text-[11px]">落地點：${sepCache.manual ? '手動標記' : 'AI 自動判斷（不對可手動改）'}</span>`;
+      if (done && sepCache.foot !== null) html += `<br><span class="text-slate-500 text-[11px]">落地點：${sepCache.manualFoot ? '手動標記' : 'AI 自動估計'}；出手點：${sepCache.release === null ? '尚未找到' : sepCache.manualRelease ? '手動標記' : 'AI 自動估計'}。不正確可逐格後手動改。</span>`;
       sepVerdict.innerHTML = html;
       sepVerdict.style.borderColor = border;
     }
@@ -2328,6 +2332,15 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (isPlaying) pauseVideo(false, false);
       manualFoot = getPoseCacheKey(video.currentTime || 0);
       sepCache = null; renderStage();
+    });
+    document.getElementById('btnMarkRelease').addEventListener('click', () => {
+      if (!video.videoWidth) return;
+      if (isPlaying) pauseVideo(false, false);
+      manualRelease = getPoseCacheKey(video.currentTime || 0);
+      sepCache = null; renderStage();
+    });
+    document.getElementById('btnResetEvents').addEventListener('click', () => {
+      manualFoot = null; manualRelease = null; sepCache = null; renderStage();
     });
     sepStrip.addEventListener('click', (e) => {
       const rect = sepStrip.getBoundingClientRect();
@@ -3445,8 +3458,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         },
         estimatedEvents: {
           footStrikeSeconds: sep ? eventTime(sep.foot) : null,
-          footStrikeSource: sep && sep.foot !== null ? (sep.manual ? 'manual' : 'automatic-estimate') : null,
+          footStrikeSource: sep && sep.foot !== null ? (sep.manualFoot ? 'manual' : 'automatic-estimate') : null,
           ballReleaseSeconds: sep ? eventTime(sep.release) : null,
+          ballReleaseSource: sep && sep.release !== null ? (sep.manualRelease ? 'manual' : 'automatic-estimate') : null,
           eventDetectionReason: sep ? sep.eventReason : null,
           throwingWristIndex: sep ? sep.wristIndex : null,
           throwingWristSource: sep ? sep.wristSource : null,
