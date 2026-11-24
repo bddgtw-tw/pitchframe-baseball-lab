@@ -1,0 +1,93 @@
+name: 家長／教練實測回饋
+description: 用一段已取得同意的影片完成核心流程，告訴我們哪裡真的有幫助
+title: "[實測] "
+labels: ["user-test"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感謝協助驗證 PitchFrame。請不要上傳兒童影片、姓名、球隊、學校或可識別截圖；只需描述操作結果。
+  - type: dropdown
+    id: role
+    attributes:
+      label: 你的角色
+      options:
+        - 家長
+        - 教練
+        - 球員（由成人陪同）
+        - 其他棒球工作者
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: 裝置與瀏覽器
+      placeholder: 例如 iPhone 15 / Safari
+    validations:
+      required: true
+  - type: dropdown
+    id: completion
+    attributes:
+      label: 是否完成「選片 → 找到落地與出手 → 分享分析」？
+      options:
+        - 是，沒有需要協助
+        - 是，但中途需要摸索
+        - 否，卡住了
+    validations:
+      required: true
+  - type: dropdown
+    id: time
+    attributes:
+      label: 大約花多久？
+      options:
+        - 3 分鐘內
+        - 3–5 分鐘
+        - 超過 5 分鐘
+        - 沒有完成
+    validations:
+      required: true
+  - type: textarea
+    id: stuck
+    attributes:
+      label: 最卡或最不確定的一步
+      description: 若沒有卡住，也請寫「沒有」。
+    validations:
+      required: true
+  - type: dropdown
+    id: useful
+    attributes:
+      label: 分享出去的內容是否比直接傳原始影片更容易討論？
+      options:
+        - 5－明顯更有幫助
+        - 4－有幫助
+        - 3－差不多
+        - 2－幫助有限
+        - 1－反而更難理解
+        - 尚未分享
+    validations:
+      required: true
+  - type: textarea
+    id: response
+    attributes:
+      label: 教練或接收者實際用了哪些資訊？
+      description: 例如落地格、出手格、拍攝條件、AI 摘要；若尚未分享請寫「尚未分享」。
+    validations:
+      required: true
+  - type: textarea
+    id: remove
+    attributes:
+      label: 哪個畫面或功能可以刪掉？
+      description: PitchFrame 優先減少複雜度；沒有明確用途的功能會考慮移除。
+  - type: textarea
+    id: keep
+    attributes:
+      label: 唯一最值得保留的部分
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: 隱私確認
+      options:
+        - label: 我沒有在此 Issue 公開兒童身分、未經同意的影片或私人連結。
+          required: true

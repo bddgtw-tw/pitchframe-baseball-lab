@@ -8,6 +8,7 @@ const fail = message => { throw new Error(message); };
 
 const html = read('index.html');
 const science = read('SCIENCE.md');
+const pilot = read('PILOT.md');
 const analysisSchema = JSON.parse(read('schemas/pitchframe-analysis-package-v2.schema.json'));
 const analysisExample = JSON.parse(read('examples/pitchframe-analysis-package-v2.example.json'));
 const scripts = [...html.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/gi)];
@@ -52,6 +53,9 @@ if (analysisSchema.properties?.estimatedEvents?.properties?.separationSignal?.pr
 if (analysisExample.schema !== analysisSchema.properties.schema.const) fail('AI package example and schema versions do not match.');
 if (analysisExample.estimatedEvents?.separationSignal?.validatedPhysicalMeasurement !== false) {
   fail('AI package example must preserve the physical-measurement safeguard.');
+}
+for (const pilotGate of ['5 分鐘內完成', '至少收集 3 位家長與 2 位教練', '可以刪除或收起']) {
+  if (!pilot.includes(pilotGate)) fail(`Parent/coach validation gate is missing: ${pilotGate}`);
 }
 for (const handoffBehavior of ['navigator.canShare({ files: [file] })', 'navigator.clipboard.writeText(content)', "err.name === 'AbortError'"]) {
   if (!html.includes(handoffBehavior)) fail(`AI handoff behavior is missing: ${handoffBehavior}`);
