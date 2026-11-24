@@ -18,37 +18,46 @@ const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(match => match[1]);
 const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
 if (duplicates.length) fail(`Duplicate HTML ids: ${duplicates.join(', ')}`);
 
-for (const requiredId of ['videoPlayer', 'scrubber', 'viewSettings', 'moreExports', 'btnExportPNG', 'btnExportVideo', 'btnExportAI', 'btnShareAI', 'aiHandoffStatus', 'btnShareApp', 'analysisCoverage', 'btnMarkFoot', 'btnMarkRelease', 'btnResetEvents']) {
+for (const requiredId of ['captureView', 'workView', 'resultPanel', 'videoPlayer', 'scrubber', 'btnEmptyCapture', 'btnEmptyChoose', 'btnPlayPause', 'btnSlow', 'btnJumpFoot', 'btnJumpRelease', 'btnMarkFoot', 'btnMarkRelease', 'btnShareResult', 'btnExportVideo', 'btnShareAI', 'aiHandoffStatus', 'btnShareApp', 'analysisCoverage']) {
   if (!ids.includes(requiredId)) fail(`Required control is missing: ${requiredId}`);
 }
 for (const qualityBehavior of ['analysisCoverageSnapshot', 'operationalThreshold = 0.8', 'readyForAutomatedSummary', '80% 是 PitchFrame 的保守操作門檻']) {
   if (!html.includes(qualityBehavior)) fail(`Pose coverage safeguard is missing: ${qualityBehavior}`);
 }
-for (const simplificationBehavior of ['匯入投球影片', '分享分析給教練／AI']) {
-  if (!html.includes(simplificationBehavior)) fail(`Progressive disclosure behavior is missing: ${simplificationBehavior}`);
+// The parent flow is three steps, one screen at a time: capture -> analyze -> result.
+for (const stepBehavior of ['<body data-step="capture">', "setStep('analyze')", "setStep('result')", "setStep('capture')",
+  'body[data-step="capture"] #captureView', 'body:not([data-step="result"]) #resultPanel', '拍攝投球', '分享結果圖給教練']) {
+  if (!html.includes(stepBehavior)) fail(`Three-step flow behavior is missing: ${stepBehavior}`);
 }
-for (const sharingBehavior of ['免費免登入：用手機逐格確認前腳落地與出手', "btnShareApp.textContent = '分享工具'"]) {
+for (const resultImageBehavior of ['async function buildResultImage()', "type: 'image/png'", 'navigator.canShare({ files: [file] })']) {
+  if (!html.includes(resultImageBehavior)) fail(`Shareable result image is missing: ${resultImageBehavior}`);
+}
+for (const sharingBehavior of ['免費免登入：用手機逐格確認前腳落地與出手', "btnShareApp.textContent = '分享給其他家長'"]) {
   if (!html.includes(sharingBehavior)) fail(`Parent sharing behavior is missing: ${sharingBehavior}`);
 }
-for (const performanceBehavior of ['href="./pitchframe.css"', '選擇影片後才載入本站 AI 模型', 'if (!isPoseModelReady && !poseInitPromise) initMediaPipe()']) {
+for (const performanceBehavior of [ 'if (!isPoseModelReady && !poseInitPromise) initMediaPipe()']) {
   if (!html.includes(performanceBehavior)) fail(`Deferred-loading behavior is missing: ${performanceBehavior}`);
 }
 for (const samplingBehavior of ['const ANALYSIS_SAMPLE_FPS = 8', 'sampledKeys: frames.map(frame => frame.index)', '個取樣點', 'fps: ANALYSIS_SAMPLE_FPS']) {
   if (!html.includes(samplingBehavior)) fail(`Bounded whole-video sampling is missing: ${samplingBehavior}`);
 }
-for (const eventSyncBehavior of ['function currentManualEventKey()', 'poseMatchesFrame() ? currentPoseStamp : frameStamp()', 'manualRelease = currentManualEventKey()', 'sepCache = null; renderStage(); renderAnalysisCoverage()']) {
+for (const eventSyncBehavior of ['function currentManualEventKey()', 'poseMatchesFrame() ? currentPoseStamp : frameStamp()', 'manualRelease = currentManualEventKey()', 'sepCache = null; renderStage(); renderAnalysisCoverage()', 'function updateEventChips(sep)']) {
   if (!html.includes(eventSyncBehavior)) fail(`Manual event/frame synchronization is missing: ${eventSyncBehavior}`);
 }
 for (const blockingBehavior of ['src="./tailwind.js"', "addEventListener('DOMContentLoaded', initMediaPipe)", 'user-scalable=no', 'btnInstallApp', 'beforeinstallprompt', 'btnSmooth', 'blendCanvas', 'sessionSetup', 'btnPrev5', 'btnNext5', 'data-speed="0.1"', 'data-speed="0.75"', 'btnCapture', 'btnChoose', 'telemetryGrid', 'currentFrame: {', 'ctxHandedness', 'qualityFullBody', 'progressSection', 'pf-progress-history', 'athleteContext:', 'captureQuality:', 'comparison: {']) {
   if (html.includes(blockingBehavior)) fail(`Blocking or inaccessible startup behavior remains: ${blockingBehavior}`);
 }
-for (const scienceGuard of ['不能據此要求孩子增加扭轉', '不得解讀為越大越好', 'PMC9532595', 'pitchframe-analysis-package-v2', 'validatedPhysicalMeasurement: false']) {
+// Removed on purpose to keep the parent flow to capture -> analyze -> result. Do not bring these back without a usage reason.
+for (const removedUi of ['pitchframe.css', 'tailwind', 'drawCanvas', 'annotationToolbar', 'sepTintCanvas', 'sepStrip', 'sepPanel', 'viewSettings', 'speed-btn', 'btnLoop', 'btnResetEvents', 'btnExportPNG', 'moreExports', 'parentGuide']) {
+  if (html.includes(removedUi)) fail(`Removed UI came back: ${removedUi}`);
+}
+for (const scienceGuard of ['不是評分或醫療判斷', '不得解讀為越大越好', 'pitchframe-analysis-package-v2', 'validatedPhysicalMeasurement: false']) {
   if (!html.includes(scienceGuard)) fail(`Sports-science safeguard is missing: ${scienceGuard}`);
 }
 for (const unsafeClaim of ['有做到髖肩分離', '紅色應該在落地前後出現', '髖已開、肩還關著']) {
   if (html.includes(unsafeClaim)) fail(`Unsafe single-camera verdict remains: ${unsafeClaim}`);
 }
-for (const methodologyClaim of ['validatedPhysicalMeasurement: false', '不把它們轉成好壞總分', '評估 → 提出假設 → 小幅介入 → 重測']) {
+for (const methodologyClaim of ['PMC9532595', 'validatedPhysicalMeasurement: false', '不把它們轉成好壞總分', '評估 → 提出假設 → 小幅介入 → 重測']) {
   if (!science.includes(methodologyClaim)) fail(`Science methodology is missing: ${methodologyClaim}`);
 }
 if (analysisSchema.properties?.schema?.const !== 'pitchframe-analysis-package-v2') fail('AI package schema version is incorrect.');

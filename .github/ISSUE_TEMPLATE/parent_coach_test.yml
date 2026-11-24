@@ -28,7 +28,7 @@ body:
   - type: dropdown
     id: completion
     attributes:
-      label: 是否完成「選片 → 找到落地與出手 → 分享分析」？
+      label: 是否完成「選片 → 找到落地與出手 → 分享結果圖」？
       options:
         - 是，沒有需要協助
         - 是，但中途需要摸索

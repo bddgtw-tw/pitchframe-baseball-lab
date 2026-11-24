@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="zh-TW" class="h-full bg-slate-950 text-slate-100">
+<html lang="zh-TW">
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' blob:; worker-src 'self' blob:; manifest-src 'self'; font-src 'self'; base-uri 'none'; form-action 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="description" content="免費、免上傳的少棒投球逐格分析工具。在瀏覽器本機查看骨架、關節角度、前腳落地與髖肩分離趨勢，並匯出給教練或 AI 討論。">
+  <meta name="description" content="拍一球，看懂孩子的投球。免費、免登入、影片不上傳：手機自動畫出骨架，找出前腳落地與出手，做成一張圖傳給教練。">
   <meta name="robots" content="index,follow">
   <meta property="og:type" content="website">
   <meta property="og:locale" content="zh_TW">
-  <meta property="og:title" content="PitchFrame｜把孩子的投球影片變成可以一起討論的逐格畫面">
-  <meta property="og:description" content="影片不離開裝置。免費查看逐格、骨架、角度與髖肩分離趨勢，再把分析包交給教練或 AI。">
+  <meta property="og:title" content="PitchFrame｜拍一球，看懂孩子的投球">
+  <meta property="og:description" content="免費、免登入、影片不上傳。自動畫出骨架，找出前腳落地與出手，做成一張圖傳給教練。">
   <meta property="og:url" content="https://bddgtw-tw.github.io/pitchframe-baseball-lab/">
   <meta property="og:image" content="https://bddgtw-tw.github.io/pitchframe-baseball-lab/assets/pitchframe-preview.png">
   <meta property="og:image:width" content="1440">
@@ -33,8 +33,6 @@
     }
   </script>
   <title>PitchFrame｜免費少棒投球逐格分析・影片不上傳</title>
-  <!-- Precompiled Tailwind CSS 3.4.17: no runtime compiler on the parent-facing page. -->
-  <link rel="stylesheet" href="./pitchframe.css">
   <script src="./pitchframe_events.js"></script>
   <script>
 /* Local-only, bounded ISO-BMFF sample timeline. Unsupported layouts return null.
@@ -91,510 +89,264 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
   </script>
   <!-- Bundled MediaPipe Pose 0.5.1675469404, same-origin assets -->
   <style>
-    /* Mobile-first touch ergonomic rules */
+    /* PitchFrame：一次只出現一個步驟（拍攝 → 分析 → 結果），手機直式優先 */
     :root {
-      --baseball-lime: #bef264;
-      --baseball-green: #34d399;
-      --baseball-blue: #38bdf8;
-      --baseball-orange: #fb923c;
+      --bg: #0b131c; --surface: #111c28; --line: #253747; --text: #eef5f9; --muted: #9fb3c2;
+      --accent: #bef264; --accent-ink: #13200a; --warn: #fbbf24; --danger: #fb7185;
+      --header-h: 56px;
+      color-scheme: dark;
     }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
-      touch-action: manipulation;
-    }
-    .text-\[10px\], .text-\[11px\], #contextFields label, #annotationSection summary span { font-size: 12px !important; }
-    #scrubber { touch-action: none; }
-    /* Scrubber thumb custom style */
-    input[type=range]::-webkit-slider-thumb {
-      appearance: none;
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: var(--baseball-lime);
-      cursor: pointer;
-      box-shadow: 0 0 6px rgba(0,0,0,0.6);
-      border: 2px solid #0f172a;
-    }
-    input[type=range]::-moz-range-thumb {
-      width: 18px;
-      height: 18px;
-      border-radius: 50%;
-      background: var(--baseball-lime);
-      cursor: pointer;
-      box-shadow: 0 0 6px rgba(0,0,0,0.6);
-      border: 2px solid #0f172a;
-    }
-    /* Non-selectable UI during scrubbing & drawing */
-    .no-select {
-      user-select: none;
-      -webkit-user-select: none;
-    }
-    /* Touch canvas prevents default scrolling while drawing */
-    .touch-draw-active {
-      touch-action: none;
-    }
-  
-    /* Keep the decoded source frame visible; overlays share the same inner box. */
-    #stageContainer { position: relative; display: block; flex: 0 0 auto;
-      box-sizing: border-box; width: 100%; min-height: 0 !important;
-      max-height: 72vh; padding: 0; background: #000; border-radius: 0;
-      overflow: hidden; }
-    #videoPlayer, #mainCanvas, #drawCanvas { position: absolute; inset: 0;
-      display: block; width: 100%; height: 100%; margin: 0; padding: 0;
-      border: 0; box-sizing: border-box; }
-    #videoPlayer { object-fit: contain; object-position: 50% 50%; z-index: 0;
-      pointer-events: none; background: #000; }
-    #mainCanvas, #drawCanvas { object-fit: fill; }
-    #textInputModal.hidden { display: none !important; }
-    #mainCanvas { z-index: 10; pointer-events: none; background: transparent; }
-    #drawCanvas { z-index: 20; pointer-events: none; background: transparent; }
-    #emptyPrompt { position: absolute; inset: 0; z-index: 30; }
-    #emptyPrompt.hidden { display: none !important; }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: var(--bg); color: var(--text); }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans TC", sans-serif;
+      line-height: 1.5; touch-action: manipulation; -webkit-text-size-adjust: 100%; }
+    button { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+    button:focus-visible, a:focus-visible, #scrubber:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+    a { color: inherit; }
+    .hidden, [hidden] { display: none !important; }
 
-  
-    /* Operation-first app layout: whole video, adjacent controls, results last. */
-    :root { --pf-surface: #101b27; --pf-line: #2a3e4e; --pf-muted: #a8bbc8; }
-    html { min-height: 100%; scroll-padding-top: 76px; }
-    body { height: auto; min-height: 100svh; background: #0b131c; }
-    body > header { min-height: 64px; padding: 10px clamp(12px, 2vw, 28px); background: #101b27; }
-    main { display: block !important; flex: none !important; width: 100%; max-width: 1200px !important;
-      padding: 16px clamp(20px, 2vw, 28px) 28px !important; overflow: visible !important; }
-    #stageStatusBar { margin-bottom: 10px; min-height: 26px; }
-    #statusBadge { background: transparent; border: 0; box-shadow: none; padding-left: 0; }
-    #operationWorkspace { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0; align-items: start; }
-    #videoPanel, #controlPanel { min-width: 0; }
-    #stageContainer { height: auto; max-height: 55svh !important; margin: 0 !important;
-      border: 1px solid var(--pf-line); box-shadow: none; }
-    #controlPanel { border: 1px solid var(--pf-line); border-radius: 0 0 12px 12px;
-      background: var(--pf-surface); padding: 16px; }
-    #playbackDeck { padding: 0; border: 0; background: transparent; box-shadow: none; gap: 10px; }
-    .operation-heading { margin: 0; font-size: 15px; line-height: 1.4; font-weight: 700; color: #edf5fa; }
-    #timelineRow { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
-    #timeCurrent, #timeDuration { width: auto; font-size: 13px; line-height: 22px; font-variant-numeric: tabular-nums; }
-    #timeCurrent { text-align: left; color: #eef6fa; font-weight: 600; }
-    #timeDuration { text-align: right; }
-    #timelineRow > div { grid-row: 2; grid-column: 1 / -1; min-width: 0; min-height: 44px; }
-    #scrubber { width: 100%; height: 44px; background: transparent; margin: 0; }
-    /* 分析進度由影片上的文字狀態呈現，時間軸保持單一底色。 */
-    #scrubber { --pf-analyzed: 0%; }
-    #scrubber { --pf-a0: 0%; }
-    #scrubber::-webkit-slider-runnable-track { height: 6px; border-radius: 8px; background: #334b5b; }
-    /* 選擇球員提示：只蓋住影片，控制列仍可操作 */
-    #pickOverlay { position: absolute; inset: 0; z-index: 35; cursor: crosshair; touch-action: manipulation; }
-    #pickOverlay.hidden { display: none !important; }
-    #pickHint { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 20px);
-      display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 14px; border-radius: 12px;
-      background: rgba(2, 6, 23, 0.86); border: 1px solid #bef264; color: #f1f5f9; text-align: center; cursor: default; }
-    #pickTitle { font-size: 16px; color: #bef264; }
-    #pickSub { font-size: 13px; color: #cbd5e1; }
-    #btnPickWhole { margin-top: 4px; min-height: 44px; padding: 0 16px; border-radius: 10px; font-size: 14px; font-weight: 600;
-      color: #e2e8f0; background: #1e293b; border: 1px solid #475569; }
-    #analysisPill { position: absolute; left: 10px; top: 10px; z-index: 25; pointer-events: none; padding: 6px 10px; border-radius: 999px;
-      background: rgba(2, 6, 23, 0.82); color: #f1f5f9; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
-    #analysisPill.hidden { display: none; }
-    #btnRepick:not(.hidden) { display: flex; }
-    #scrubber::-webkit-slider-thumb { margin-top: -6px; }
-    #scrubber::-moz-range-track { height: 6px; border-radius: 8px; background: #334b5b; }
-    #playbackActions { display: grid; grid-template-columns: minmax(0,1fr); gap: 10px; padding: 0; border: 0; }
-    #frameControls { display: grid; grid-template-columns: 1fr 1fr 1.4fr 1fr 1fr; gap: 6px; }
-    #frameControls button { min-width: 0; padding: 8px 2px; font-size: 12px; justify-content: center; white-space: nowrap; }
-    #speedControls { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 4px; padding: 0; background: none; border: 0; }
-    #speedControls button { padding: 6px 0; font-size: 12px; border: 1px solid var(--pf-line); }
-    #viewControls { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px; }
-    #viewControls button { justify-content: center; padding: 6px 4px; font-size: 12px; white-space: nowrap; }
-    #controlPanel button, #exportActions button, body > header button { min-height: 44px; }
-    button { transition: background-color .16s, border-color .16s, transform .16s; }
-    button:active { transform: translateY(1px); }
-    button:focus-visible, summary:focus-visible, #scrubber:focus-visible { outline: 2px solid #bef264; outline-offset: 3px; }
-    #annotationSection { margin-top: 14px; border-top: 1px solid var(--pf-line); }
-    #annotationSection summary { cursor: pointer; padding: 13px 0 0; min-height: 44px; font-size: 13px; color: #e2edf5; }
-    #annotationSection summary span { color: var(--pf-muted); font-size: 11px; margin-left: 10px; }
-    #annotationToolbar { padding: 12px 0 0; border: 0; background: transparent; box-shadow: none; border-radius: 0; }
-    #annotationToolbar > div { flex-wrap: wrap; gap: 6px; min-width: 0; }
-    #annotationToolbar .color-swatch { width: 44px; height: 44px; min-width: 44px; }
-    #annotationToolbar .color-swatch[data-color] { border: 10px solid var(--pf-surface); }
-    #poseDiagnostics { margin: 12px 0 0; padding: 10px 0 !important; background: transparent !important;
-      color: var(--pf-muted) !important; font-size: 12px !important; line-height: 1.6; overflow-wrap: anywhere; }
-    #resultsSection { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--pf-line); }
-    #resultsHeader { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 16px; }
-    #resultsHeading { font-size: 15px; font-weight: 700; }
-    #timeFrameBadge { color: var(--pf-muted); font: 12px ui-monospace, monospace; }
-    #exportActions { margin-top: 18px; justify-content: flex-start; display: grid; grid-template-columns: 1fr; gap: 10px; }
-    #exportActions button { justify-content: center; border-radius: 8px; }
-    #parentGuide { margin: 0 0 18px; padding: 16px; border: 1px solid #365064; border-radius: 14px; background: #101b27; }
-    #parentGuide h2 { margin: 0; font-size: 18px; color: #f8fafc; }
-    #parentGuide ol { margin: 12px 0 0; padding: 0; list-style: none; display: grid; gap: 10px; }
-    #parentGuide li { display: grid; grid-template-columns: 30px 1fr; gap: 10px; align-items: start; color: #d7e4ec; font-size: 13px; line-height: 1.6; }
-    .guide-number { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: #bef264; color: #14202b; font-weight: 900; }
-    .science-note { margin-top: 12px; padding-top: 12px; border-top: 1px solid #2a3e4e; color: #a8bbc8; font-size: 12px; line-height: 1.65; }
-    .header-link { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 10px; border: 1px solid #405669; border-radius: 8px; color: #d7e4ec; font-size: 12px; font-weight: 700; }
-    @media (min-width: 640px) {
-      #exportActions { display: flex; }
-      #parentGuide ol { grid-template-columns: repeat(3,minmax(0,1fr)); }
-    }
-    @media (min-width: 1024px), (orientation: landscape) and (min-width: 600px) {
-      #operationWorkspace { grid-template-columns: minmax(0,1fr); gap: 0; }
-      #controlPanel { border-radius: 0 0 12px 12px; }
-      #stageContainer { height: clamp(280px, 58svh, 680px) !important; max-height: none !important; }
-    }
-    @media (orientation: landscape) and (max-width: 1023px) {
-      body > header { min-height: 52px; padding-top: 4px; padding-bottom: 4px; }
-      main { padding-top: 8px !important; }
-      #stageStatusBar { margin-bottom: 6px; min-height: 20px; }
-      #operationWorkspace { grid-template-columns: minmax(0,1fr); gap: 0; }
-      #stageContainer { height: max(240px, calc(100svh - 170px)) !important; }
-      #controlPanel { padding: 12px; }
-      #playbackDeck { gap: 4px; }
-      #playbackActions { gap: 6px; }
-      #annotationSection { margin-top: 8px; }
-      #annotationSection summary { padding-top: 10px; }
-    }
-    @media (max-width: 639px) {
-      body > header { flex-wrap: nowrap; gap: 8px; }
-      #headerActions { width: auto; margin-left: auto; flex: 0 0 auto; }
-      #headerActions button { justify-content: center; padding-left: 8px; padding-right: 8px; white-space: nowrap; }
-      .header-link { min-height: 36px; padding: 0 9px; }
-    }
-    @media (max-width: 359px) {
-      #controlPanel { padding: 10px; }
-      #frameControls { gap: 4px; }
-    }
-    @media (prefers-reduced-motion: reduce) { button { transition: none; } }
-    /* 主畫面全螢幕開啟時，避開瀏海與底部手勢列 */
-    body > header { padding-top: max(10px, env(safe-area-inset-top)); }
-    main { padding-bottom: max(28px, env(safe-area-inset-bottom)) !important; }
+    /* Header */
+    .top { position: sticky; top: 0; z-index: 40; height: calc(var(--header-h) + env(safe-area-inset-top));
+      padding: env(safe-area-inset-top) 16px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      background: rgba(11, 19, 28, .94); border-bottom: 1px solid var(--line); backdrop-filter: blur(8px); }
+    .brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 16px; text-decoration: none; }
+    .logo { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--accent);
+      color: var(--accent-ink); font-size: 13px; font-weight: 900; }
+    .top-link { min-height: 40px; padding: 0 12px; display: inline-flex; align-items: center; border-radius: 10px;
+      border: 1px solid var(--line); font-size: 14px; font-weight: 600; text-decoration: none; color: var(--text); }
+    body:not([data-step="capture"]) #githubLink { display: none; }
+    body[data-step="capture"] #btnClearVideo { display: none; }
 
+    main { width: 100%; max-width: 1120px; margin: 0 auto; padding: 0 16px max(24px, env(safe-area-inset-bottom)); }
+    .view { display: none; }
+    body[data-step="capture"] #captureView { display: block; }
+    body:not([data-step="capture"]) #workView { display: block; }
+
+    /* Step 1 拍攝 */
+    #captureView { max-width: 520px; margin: 0 auto; padding-top: 28px; }
+    .eyebrow { margin: 0 0 8px; color: var(--accent); font-size: 14px; font-weight: 700; }
+    #captureView h1 { margin: 0; font-size: clamp(30px, 8.5vw, 40px); line-height: 1.2; letter-spacing: -.01em; }
+    .lead { margin: 12px 0 24px; color: #c9d8e2; font-size: 16px; }
+    .btn { width: 100%; min-height: 56px; border-radius: 14px; font-size: 17px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center; gap: 8px; transition: transform .12s, background-color .15s; }
+    .btn:active { transform: scale(.98); }
+    .btn.primary { background: var(--accent); color: var(--accent-ink); }
+    .btn.ghost { margin-top: 10px; border: 1px solid var(--line); background: var(--surface); }
+    .btn:disabled { opacity: .55; cursor: wait; }
+    .tips { list-style: none; margin: 28px 0 0; padding: 0; display: grid; gap: 10px; }
+    .tips li { display: grid; grid-template-columns: 32px 1fr; gap: 12px; align-items: start; padding: 12px 14px;
+      border-radius: 12px; background: var(--surface); color: #c9d8e2; font-size: 14px; }
+    .tips b { display: block; color: var(--text); font-size: 15px; }
+    .tip-n { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: #1e2d3b;
+      color: var(--accent); font-weight: 800; }
+    .foot { margin: 28px 0 8px; display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px; color: var(--muted); font-size: 14px; }
+    .foot a, .foot button { min-height: 44px; display: inline-flex; align-items: center; text-decoration: underline; text-underline-offset: 3px; color: var(--muted); }
+
+    /* Stepper */
+    .steps { list-style: none; margin: 10px 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+      counter-reset: s; font-size: 13px; color: var(--muted); }
+    .steps li { counter-increment: s; padding-top: 8px; border-top: 3px solid var(--line); text-align: center; }
+    .steps li::before { content: counter(s) " "; font-weight: 700; }
+    body[data-step="analyze"] .steps li:nth-child(-n+2), body[data-step="result"] .steps li { border-color: var(--accent); color: var(--text); }
+    body[data-step="analyze"] .steps li:nth-child(2), body[data-step="result"] .steps li:nth-child(3) { font-weight: 700; }
+
+    /* Video stage: whole frame, no crop. Stays in view while using the controls below. */
+    #stageWrap { position: sticky; top: calc(var(--header-h) + env(safe-area-inset-top)); z-index: 30; background: var(--bg); padding-bottom: 4px; }
+    #stageContainer { position: relative; width: 100%; max-width: 100%; margin: 0 auto; aspect-ratio: 16 / 9;
+      max-height: 42svh; background: #000; border-radius: 14px; overflow: hidden; }
+    #videoPlayer, #mainCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+    #videoPlayer { object-fit: contain; z-index: 0; pointer-events: none; background: #000; }
+    #mainCanvas { z-index: 10; pointer-events: none; }
+    #pickOverlay { position: absolute; inset: 0; z-index: 35; cursor: crosshair; }
+    /* 選人提示放在畫面底部的一條，不遮住孩子；說明文字在影片下方 */
+    #pickHint { position: absolute; left: 8px; right: 8px; bottom: 8px; display: flex; align-items: center; justify-content: space-between;
+      gap: 10px; padding: 6px 6px 6px 12px; border-radius: 12px; background: rgba(2, 6, 23, .82); cursor: default; }
+    #pickTitle { font-size: 15px; color: var(--accent); }
+    #pickSub { display: none; }
+    #btnPickWhole { min-height: 40px; padding: 0 12px; border-radius: 9px; font-size: 14px; font-weight: 600;
+      background: #1e293b; border: 1px solid #475569; white-space: nowrap; }
+    #analysisPill { position: absolute; left: 10px; top: 10px; z-index: 25; pointer-events: none; padding: 6px 12px; border-radius: 999px;
+      background: rgba(2, 6, 23, .85); font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+    /* Timeline */
+    #timelineRow { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 0 12px; margin-top: 6px;
+      font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    #timeFrameBadge { color: var(--text); font-weight: 700; }
+    #timeReadout { text-align: right; }
+    #scrubber { grid-column: 1 / -1; width: 100%; height: 44px; margin: 0; background: transparent; appearance: none; -webkit-appearance: none; touch-action: none; }
+    #scrubber::-webkit-slider-runnable-track { height: 6px; border-radius: 6px; background: #334b5b; }
+    #scrubber::-moz-range-track { height: 6px; border-radius: 6px; background: #334b5b; }
+    #scrubber::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%;
+      background: var(--accent); border: 3px solid var(--bg); }
+    #scrubber::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); border: 3px solid var(--bg); }
+
+    .note { margin: 10px 0 0; padding: 10px 12px; border-radius: 10px; font-size: 14px; background: var(--surface); color: #c9d8e2;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .note.warn { border: 1px solid rgba(251, 191, 36, .5); color: #fde68a; }
+    .note.error { border: 1px solid rgba(251, 113, 133, .6); color: #fecdd3; }
+    .note button { flex: none; min-height: 40px; padding: 0 12px; border-radius: 8px; border: 1px solid currentColor; font-size: 14px; font-weight: 700; }
+    .hint { margin: 10px 0 0; color: var(--muted); font-size: 14px; text-align: center; }
+
+    /* Step 2 分析：只看進度，不放操作 */
+    body:not([data-step="result"]) #resultPanel { display: none; }
+    body:not([data-step="analyze"]) #analyzeHint { display: none; }
+
+    /* Step 3 結果 */
+    #transport { display: grid; grid-template-columns: 1fr 1.4fr 1fr 1fr; gap: 8px; margin-top: 4px; }
+    #transport button { min-height: 52px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line);
+      font-size: 15px; font-weight: 700; touch-action: none; user-select: none; -webkit-user-select: none; }
+    #btnPlayPause { background: var(--accent) !important; color: var(--accent-ink); border-color: transparent !important; }
+    #btnSlow[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
+    .hold-active { box-shadow: 0 0 0 2px var(--accent); }
+    .section-label { margin: 20px 0 8px; font-size: 14px; font-weight: 700; color: var(--muted); }
+    #keyFrames { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .key { display: grid; gap: 6px; }
+    .key-jump { min-height: 72px; padding: 10px 12px; border-radius: 14px; background: var(--surface); border: 2px solid var(--line);
+      text-align: left; display: grid; gap: 2px; }
+    .key-jump.is-current { border-color: var(--accent); }
+    .key-name { font-size: 17px; font-weight: 800; }
+    .key-info { font-size: 13px; color: var(--muted); }
+    .key-set { min-height: 44px; border-radius: 10px; font-size: 14px; color: var(--muted); border: 1px dashed var(--line); }
+    #resultActions { margin-top: 20px; }
+    .more-links { margin-top: 12px; display: flex; flex-wrap: wrap; justify-content: center; gap: 0 18px; }
+    .more-links button { min-height: 44px; font-size: 14px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+    .fineprint { margin: 12px 0 0; color: #7d93a3; font-size: 12px; text-align: center; }
+
+    /* Export modal */
+    #exportModal { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px;
+      background: rgba(0, 0, 0, .8); }
+    .modal-card { width: 100%; max-width: 360px; padding: 24px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); text-align: center; }
+    .modal-card h3 { margin: 0 0 4px; font-size: 17px; }
+    #exportFormatNotice { margin: 0 0 16px; font-size: 13px; color: var(--muted); }
+    .bar { height: 8px; border-radius: 8px; overflow: hidden; background: #1e2d3b; }
+    #exportProgressBar { height: 100%; width: 0; background: var(--accent); transition: width .1s; }
+    #exportProgressPercent { display: block; margin: 10px 0 16px; font-size: 13px; color: var(--accent); font-variant-numeric: tabular-nums; }
+    #btnCancelExport { min-height: 44px; padding: 0 18px; border-radius: 10px; border: 1px solid var(--line); }
+
+    /* 橫向／大螢幕：影片在左、操作在右 */
+    /* 手機：影片＋時間軸固定在上方，往下操作時畫面不會跑掉 */
+    @media (max-width: 899px) { #stageCol { display: contents; } }
+    @media (min-width: 900px) {
+      body[data-step="result"] #workView { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(300px, 1fr); gap: 0 24px; align-items: start; }
+      body[data-step="result"] .steps { grid-column: 1 / -1; }
+      body[data-step="result"] #stageCol { position: sticky; top: calc(var(--header-h) + 12px); }
+      body[data-step="result"] #stageWrap { position: static; }
+      #stageContainer { max-height: 70svh; }
+      body[data-step="result"] #resultPanel { margin-top: 0; }
+    }
+    @media (orientation: landscape) and (max-height: 500px) {
+      #stageContainer { max-height: calc(100svh - var(--header-h) - 70px); }
+      #stageWrap { position: static; }
+    }
+    @media (prefers-reduced-motion: reduce) { .btn, button { transition: none; } }
   </style>
 </head>
-<body class="h-full flex flex-col bg-slate-950 text-slate-100 overflow-x-hidden no-select">
+<body data-step="capture">
 
-  <!-- Header: Function-only header -->
-  <header class="bg-slate-900/90 border-b border-slate-800 px-3 py-2.5 sm:px-6 flex items-center justify-between z-30 sticky top-0 backdrop-blur">
-    <div class="flex items-center gap-2.5">
-      <div class="w-8 h-8 rounded-lg bg-lime-400 text-slate-950 font-black flex items-center justify-center text-sm">PF</div>
-      <div>
-        <h1 class="text-sm sm:text-base font-bold text-white tracking-tight flex items-center gap-1.5">
-          投球逐格｜PitchFrame
-        </h1>
-        <div class="flex items-center gap-1 text-[11px] text-slate-400">
-          <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-          <span>影片不離本機・AI 本地分析</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Input Actions -->
-    <div id="headerActions" class="flex items-center gap-2">
-      <!-- Hidden file inputs -->
-      <input type="file" id="cameraInput" accept="video/*" capture="environment" class="hidden">
-      <input type="file" id="fileInput" accept="video/*" class="hidden">
-
-      <a class="header-link" href="https://github.com/bddgtw-tw/pitchframe-baseball-lab" target="_blank" rel="noopener" aria-label="到 GitHub 查看 PitchFrame 專案">GitHub</a>
-
-      <button id="btnClearVideo" class="hidden flex items-center gap-1 bg-rose-500/20 hover:bg-rose-500/30 active:scale-95 text-rose-200 text-xs font-semibold px-2.5 py-2 rounded-lg border border-rose-500/40 transition" title="清除目前載入的影片">
-        <span>清除影片</span>
-      </button>
-
-    </div>
+  <header class="top">
+    <a class="brand" href="./" aria-label="PitchFrame 首頁"><span class="logo" aria-hidden="true">PF</span><span>PitchFrame</span></a>
+    <a id="githubLink" class="top-link" href="https://github.com/bddgtw-tw/pitchframe-baseball-lab" target="_blank" rel="noopener">★ GitHub</a>
+    <button id="btnClearVideo" class="top-link" type="button">換一支影片</button>
   </header>
+  <input type="file" id="cameraInput" accept="video/*" capture="environment" hidden>
+  <input type="file" id="fileInput" accept="video/*" hidden>
 
-  <!-- 30-Second Warning Toast / Banner -->
-  <div id="durationWarning" class="hidden bg-amber-500/20 border-b border-amber-500/40 px-4 py-2 text-xs text-amber-200 flex items-center justify-between">
-    <div class="flex items-center gap-2">
-      <span id="durationWarningText">影片長度超過 30 秒上限。為確保順暢度，系統已自動為您截取前 30 秒進行分析。</span>
-    </div>
-    <button id="btnCloseWarning" class="text-amber-200 hover:text-white font-bold px-2 py-0.5">關閉</button>
-  </div>
-
-  <!-- Fallback / Estimated Pose Banner -->
-  <div id="fallbackNotice" class="hidden bg-amber-900/40 border-b border-amber-600/40 px-4 py-1.5 text-xs text-amber-200 text-center font-medium">
-    未辨識到人物時，不會繪製預設或虛構骨架。
-  </div>
-
-  <!-- Main Workspace -->
-  <main class="flex-1 flex flex-col p-2 sm:p-4 max-w-6xl mx-auto w-full gap-3 overflow-y-auto">
-
-    <section id="parentGuide" aria-labelledby="parentGuideTitle">
-      <div class="flex items-start justify-between gap-3">
-        <div>
-          <h2 id="parentGuideTitle">用一支手機，和孩子一起看懂這次投球</h2>
-          <p class="mt-1 text-xs text-slate-300">側後方固定手機拍一球，確認落地與出手，再把證據分享給教練。</p>
-        </div>
-        <div class="flex shrink-0 gap-2">
-          <button id="btnShareApp" type="button" class="bg-slate-800 hover:bg-slate-700 text-slate-100 text-xs font-bold px-3 py-2 rounded-lg border border-slate-600">分享工具</button>
-        </div>
-      </div>
+  <main>
+    <!-- 步驟 1：拍攝 -->
+    <section id="captureView" class="view" aria-labelledby="captureTitle">
+      <p class="eyebrow">給少棒家長的投球逐格工具</p>
+      <h1 id="captureTitle">拍一球，<br>看懂孩子的投球</h1>
+      <p class="lead">自動畫出骨架，找出前腳落地與出手，做成一張圖傳給教練。免費、免登入，影片不會上傳。</p>
+      <button id="btnEmptyCapture" class="btn primary" type="button">拍攝投球</button>
+      <button id="btnEmptyChoose" class="btn ghost" type="button">從相簿選影片</button>
+      <ol class="tips" aria-label="拍攝小提示">
+        <li><span class="tip-n">1</span><span><b>從側面拍</b>手機固定，站在投手側面或側後方。</span></li>
+        <li><span class="tip-n">2</span><span><b>全身入鏡</b>頭到腳、出手的位置都在畫面裡。</span></li>
+        <li><span class="tip-n">3</span><span><b>一球就好</b>5 到 10 秒，光線充足。</span></li>
+      </ol>
+      <nav class="foot" aria-label="其他連結">
+        <button id="btnShareApp" type="button">分享給其他家長</button>
+        <a href="https://github.com/bddgtw-tw/pitchframe-baseball-lab/blob/main/SCIENCE.md" target="_blank" rel="noopener">方法與限制</a>
+        <a href="https://github.com/bddgtw-tw/pitchframe-baseball-lab" target="_blank" rel="noopener">開放原始碼</a>
+      </nav>
     </section>
 
-    <div id="stageStatusBar" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;flex-shrink:0">
-      <!-- Status bar outside the original video frame: AI Status & Current Frame -->
-      <div class="flex items-center gap-1.5 pointer-events-none">
-        <div id="statusBadge" class="bg-slate-900/85 backdrop-blur border border-slate-700/80 px-2.5 py-1 rounded-md text-[11px] font-mono flex items-center gap-1.5 shadow">
-          <span id="statusDot" class="w-2 h-2 rounded-full bg-lime-400 animate-pulse"></span>
-          <span id="statusText">等待影片輸入</span>
-        </div>
-      </div>
+    <!-- 步驟 2：分析／步驟 3：結果（共用同一個影片畫面） -->
+    <section id="workView" class="view" aria-label="分析與結果">
+      <ol class="steps" aria-label="進度">
+        <li>拍攝</li><li>分析</li><li>結果</li>
+      </ol>
 
-
-
-    </div>
-
-    <section id="operationWorkspace" aria-label="影片與操作台">
-      <div id="videoPanel">
-    <!-- Video Stage / Canvas Container (嚴格保持真實長寬比，不變形、不壓縮) -->
-    <div id="stageContainer" class="relative bg-black rounded-2xl overflow-hidden border border-slate-800 flex items-center justify-center shadow-2xl w-full max-h-[70vh] mx-auto" style="aspect-ratio: 16/9; min-height: 280px;">
-      
-      <!-- Native video: original decoded frame, contained without cropping -->
-      <video id="videoPlayer" playsinline webkit-playsinline crossorigin="anonymous" tabindex="-1" aria-label="原始影片完整畫面"></video>
-
-      <!-- Separation tint: multiply-blended over the video so the player stays visible (white = no change) -->
-      <canvas id="sepTintCanvas" class="absolute inset-0 w-full h-full pointer-events-none" style="z-index:8; mix-blend-mode:multiply" aria-hidden="true"></canvas>
-
-      <!-- Transparent Canvas (simplified baseball skeleton + dynamic angle badges) -->
-      <canvas id="mainCanvas" class="absolute inset-0 w-full h-full object-contain pointer-events-none z-10"></canvas>
-
-      <div id="sepBadge" class="hidden absolute left-3 top-3 pointer-events-none rounded-xl px-3 py-2 text-sm font-bold" style="z-index:25;background:rgba(2,6,23,.88);border:1px solid #ef4444;color:#f8fafc"></div>
-
-      <!-- Annotation Canvas (user drawing lines, arrows, circles, notes) -->
-      <canvas id="drawCanvas" class="absolute inset-0 w-full h-full object-contain z-20 pointer-events-none"></canvas>
-
-      <!-- Initial Empty State -->
-      <div id="emptyPrompt" class="absolute inset-0 z-30 flex flex-col items-center justify-center p-6 text-center bg-slate-950/80 cursor-pointer">
-        <h2 class="text-base sm:text-lg font-bold text-white mb-1">匯入投球影片</h2>
-        <p class="text-xs text-slate-400 max-w-sm mb-4">
-          支援手機直式與橫式錄影。影片僅在手機/本機分析，不上傳雲端。
-        </p>
-        <div class="flex gap-2">
-          <button id="btnEmptyCapture" class="bg-slate-800 hover:bg-slate-700 text-white text-xs px-4 py-2 rounded-lg border border-slate-700 font-semibold">
-            拍攝影片
-          </button>
-          <button id="btnEmptyChoose" class="bg-lime-400 hover:bg-lime-300 text-slate-950 text-xs px-4 py-2 rounded-lg font-bold">
-            選擇影片
-          </button>
-        </div>
-      </div>
-
-      <!-- 選擇要分析的球員：載入影片後點一下目標球員 -->
-      <div id="pickOverlay" class="hidden" role="dialog" aria-label="選擇要分析的球員">
-        <div id="pickHint">
-          <strong id="pickTitle">點一下要分析的球員</strong>
-          <span id="pickSub">看不到他？先拖時間軸換一格再點</span>
-          <button id="btnPickWhole" type="button">畫面只有他一人</button>
-        </div>
-      </div>
-      <!-- 分析進度直接標在影片上（直式手機也看得到） -->
-      <div id="analysisPill" class="hidden" role="status" aria-live="polite"></div>
-
-      <!-- Floating Text Note Input Box (appears on text tool click) -->
-      <div id="textInputModal" class="hidden absolute z-40 bg-slate-900 border border-slate-700 p-2.5 rounded-xl shadow-2xl flex items-center gap-2">
-        <input type="text" id="textInputContent" placeholder="輸入備註（如：手肘過低）" maxlength="20" class="bg-slate-950 border border-slate-700 text-white text-xs px-2.5 py-1.5 rounded-lg focus:outline-none focus:border-lime-400 w-44">
-        <button id="btnConfirmText" class="bg-lime-400 text-slate-950 text-xs font-bold px-2.5 py-1.5 rounded-lg">完成</button>
-        <button id="btnCancelText" class="text-slate-400 hover:text-white text-xs px-1.5 py-1.5">取消</button>
-      </div>
-    </div>
-
-      </div>
-      <aside id="controlPanel" aria-label="播放控制">
-    <!-- Playback & Timeline Deck -->
-    <div id="playbackDeck" class="bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col gap-2.5 shadow-lg">
-      
-      <h2 class="operation-heading">播放與逐格</h2>
-      <div id="sourceFrameStatus" role="status" style="font-size:12px;color:#a8bbc8">選擇 MP4 後讀取原始影格</div>
-      <!-- Timeline Scrubber -->
-      <div id="timelineRow" class="flex items-center gap-3">
-        <span id="timeCurrent" class="text-xs font-mono text-slate-300 w-12 text-right">00:00</span>
-        <div class="relative flex-1 flex items-center">
-          <input type="range" id="scrubber" aria-label="影片時間軸" min="0" max="100" value="0" step="0.01" class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer">
-        </div>
-        <span id="timeDuration" class="text-xs font-mono text-slate-400 w-12">00:00</span>
-      </div>
-      <div id="sepStripRow" class="hidden flex items-center gap-3" style="margin-top:-8px">
-        <span class="text-[11px] text-slate-400 w-12 text-right">分離</span>
-        <canvas id="sepStrip" class="flex-1" style="height:18px;cursor:pointer" aria-label="骨盆與上軀幹旋轉差趨勢：由灰到藍只表示模型估計的相對變化，不代表好壞；點一下跳到該影格"></canvas>
-        <span class="w-12"></span>
-      </div>
-
-      <!-- Primary Control Buttons Bar -->
-      <div id="playbackActions" class="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-800">
-        
-        <!-- Step & Play Controls -->
-        <div id="frameControls" class="flex items-center gap-1 sm:gap-1.5">
-          <button id="btnPrev1" title="倒退 1 格（按住連續倒退；鍵盤左鍵）" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg font-semibold border border-slate-700 transition">
-            −1格
-          </button>
-
-          <button id="btnPlayPause" class="bg-lime-400 hover:bg-lime-300 active:scale-95 text-slate-950 text-xs px-4 py-2 rounded-lg font-bold transition shadow flex items-center gap-1.5">
-            <span id="playIcon">▶ 播放</span>
-          </button>
-
-          <button id="btnNext1" title="前進 1 格（按住連續前進；鍵盤右鍵）" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg font-semibold border border-slate-700 transition">
-            +1格
-          </button>
-
-          <!-- Loop toggle button -->
-
-        </div>
-
-        <!-- Speed Selector Pills -->
-        <div id="speedControls" aria-label="播放速度" class="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
-          <button class="speed-btn px-2 py-1 rounded-lg text-slate-400 hover:text-white transition" data-speed="0.25">0.25×</button>
-          <button class="speed-btn px-2 py-1 rounded-lg text-slate-400 hover:text-white transition" data-speed="0.5">0.5×</button>
-          <button class="speed-btn px-2 py-1 rounded-lg bg-lime-400 text-slate-950 font-bold transition" data-speed="1.0">1.0×</button>
-        </div>
-
-        <!-- View Toggles: Skeleton & Player Focus -->
-        <details id="viewSettings" class="w-full text-xs text-slate-300">
-          <summary class="cursor-pointer py-2 text-slate-300">顯示設定</summary>
-        <div id="viewControls" class="flex flex-wrap items-center gap-1.5 pt-1">
-          <button id="btnLoop" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-400 text-xs px-2.5 py-2 rounded-lg border border-slate-700 transition font-medium flex items-center gap-1" title="循環播放開關">
-            <span id="loopStatusText">循環: 開</span>
-          </button>
-          <button id="btnSeparation" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-400 text-xs px-2.5 py-2 rounded-lg border border-slate-700 transition font-medium flex items-center gap-1" title="旋轉差趨勢：灰到藍只表示模型估計的相對變化，不代表好壞">
-            <span>⟲</span>
-            <span id="separationStatusText">髖肩分離: 開</span>
-          </button>
-          <button id="btnToggleSkeleton" class="bg-lime-400/20 text-lime-300 border border-lime-400/30 text-xs font-semibold px-3 py-2 rounded-lg transition active:scale-95 flex items-center gap-1">
-            <span id="skeletonToggleText">隱藏骨架</span>
-          </button>
-          <button id="btnToggleAngles" class="bg-lime-400/20 text-lime-300 border border-lime-400/30 text-xs font-semibold px-3 py-2 rounded-lg transition active:scale-95 flex items-center gap-1">
-            <span id="anglesToggleText">隱藏角度</span>
-          </button>
-        </div>
-        </details>
-          <button id="btnRepick" type="button" class="hidden bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 text-xs px-2.5 py-2 rounded-lg border border-slate-700 transition font-medium items-center justify-center gap-1" style="grid-column:1 / -1">
-            <span>重新選擇球員</span>
-          </button>
-      </div>
-    </div>
-
-        <section id="sepPanel" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-3 flex flex-col gap-2.5 shadow-lg" aria-label="髖肩分離">
-          <h2 class="operation-heading">髖肩分離趨勢（單機位 AI 估計）</h2>
-          <div id="sepVerdict" role="status" class="rounded-xl border border-slate-700 p-2.5 text-sm leading-relaxed">等骨架分析完成…</div>
-          <div class="grid grid-cols-2 gap-1.5">
-            <button id="btnJumpFoot" class="bg-slate-100 text-slate-950 text-xs font-bold px-2 py-2.5 rounded-lg active:scale-95 transition">跳到前腳落地</button>
-            <button id="btnMarkFoot" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2 py-2.5 rounded-lg border border-slate-700 active:scale-95 transition">這格設為落地</button>
-            <button id="btnJumpRelease" class="bg-slate-100 text-slate-950 text-xs font-bold px-2 py-2.5 rounded-lg active:scale-95 transition">跳到出手</button>
-            <button id="btnMarkRelease" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2 py-2.5 rounded-lg border border-slate-700 active:scale-95 transition">這格設為出手</button>
-            <button id="btnResetEvents" class="col-span-2 bg-slate-950 hover:bg-slate-800 text-slate-400 text-[11px] px-2 py-2 rounded-lg border border-slate-800 active:scale-95 transition">清除人工標記，恢復自動估計</button>
+      <div id="stageCol">
+        <div id="stageWrap">
+          <div id="stageContainer">
+            <video id="videoPlayer" playsinline webkit-playsinline crossorigin="anonymous" tabindex="-1" aria-label="投球影片"></video>
+            <canvas id="mainCanvas" aria-hidden="true"></canvas>
+            <div id="pickOverlay" class="hidden" role="dialog" aria-label="選擇要分析的球員">
+              <div id="pickHint">
+                <strong id="pickTitle">點一下你的孩子</strong>
+                <span id="pickSub">看不到他？先拖下面的時間軸換一格再點</span>
+                <button id="btnPickWhole" type="button">畫面只有他一人</button>
+              </div>
+            </div>
+            <div id="analysisPill" class="hidden" role="status" aria-live="polite"></div>
           </div>
-          <details class="text-xs text-slate-300 leading-relaxed">
-            <summary class="cursor-pointer text-slate-200 font-semibold">這在看什麼？（運動科學來源）</summary>
-            <ul class="list-disc pl-5 mt-2 flex flex-col gap-1.5">
-              <li>這裡觀察的是前腳落地附近，骨盆與上軀幹是否出現旋轉差；研究常稱 hip-to-shoulder 或 pelvis-trunk separation。——<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC9528701/" target="_blank" rel="noopener" class="text-lime-300 underline">青少年投手研究</a></li>
-              <li><b>順序與時機要一起看</b>：投球動力鏈通常呈現骨盆旋轉峰值早於上軀幹，之後能量再往手臂與球傳遞。——<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC3445126/" target="_blank" rel="noopener" class="text-lime-300 underline">投球生物力學綜述</a></li>
-              <li>研究描述的典型近端到遠端順序為：骨盆 → 軀幹 → 上臂 → 前臂 → 手；實際順序有個體差異，不能用單次投球套一個固定模板。——<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC9950989/" target="_blank" rel="noopener" class="text-lime-300 underline">臨床生物力學指南</a></li>
-              <li>少棒追蹤研究顯示落地時的軀幹分離會隨年齡發展；不要把成人或職業球員數值當成兒童標準。——<a href="https://pubmed.ncbi.nlm.nih.gov/28968146/" target="_blank" rel="noopener" class="text-lime-300 underline">青少年縱向研究</a></li>
-              <li>限制：少棒動力傳遞研究使用 14 台攝影機（250 Hz）與測力板（1000 Hz），而且 9–13 歲球員差異很大。手機單機位只能協助回看片段，不能宣稱量到能量傳遞或精準旋轉時機。——<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC9532595/" target="_blank" rel="noopener" class="text-lime-300 underline">少棒動力鏈研究</a></li>
-            </ul>
-          </details>
-        </section>
+          <div id="timelineRow">
+            <span id="timeFrameBadge">第 1 格</span>
+            <span id="timeReadout"><span id="timeCurrent">00:00.0</span> / <span id="timeDuration">00:00.0</span></span>
+            <input type="range" id="scrubber" aria-label="影片時間軸" min="0" max="100" value="0" step="0.01">
+          </div>
+        </div>
 
-        <details id="annotationSection">
-          <summary>標註工具<span>畫線、文字與復原</span></summary>
-    <!-- Drawing & Annotation Toolbar (Accessible when paused) -->
-    <div id="annotationToolbar" class="bg-slate-900 border border-slate-800 rounded-2xl p-2.5 sm:p-3 flex flex-wrap items-center justify-between gap-2.5 shadow">
-      <!-- Drawing Tools -->
-      <div class="flex items-center gap-1 sm:gap-1.5">
-        <span class="text-[11px] text-slate-400 mr-1 font-medium">暫停標註:</span>
-        <button class="tool-btn bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 transition" data-tool="line">
-          直線 ╱
-        </button>
-        <button class="tool-btn bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 transition" data-tool="arrow">
-          箭頭
-        </button>
-        <button class="tool-btn bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 transition" data-tool="circle">
-          圈選 ◯
-        </button>
-        <button class="tool-btn bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 transition" data-tool="text">
-          文字 🆃
-        </button>
+        <p id="analyzeHint" class="hint" aria-live="polite"><span id="statusText">準備中…</span></p>
+        <div id="durationWarning" class="note warn hidden"><span id="durationWarningText"></span><button id="btnCloseWarning" type="button">知道了</button></div>
+        <div id="poseError" class="note error" role="alert" hidden><span id="poseDetail"></span><button id="btnRetryPose" type="button" hidden>重新載入 AI</button></div>
+      </div>
 
-        <!-- Color Swatches -->
-        <div class="flex items-center gap-1 ml-1.5 pl-1.5 border-l border-slate-800">
-          <button class="color-swatch w-5 h-5 rounded-full bg-lime-400 ring-2 ring-white" data-color="#bef264" title="螢光綠"></button>
-          <button class="color-swatch w-5 h-5 rounded-full bg-sky-400" data-color="#38bdf8" title="天藍"></button>
-          <button class="color-swatch w-5 h-5 rounded-full bg-rose-400" data-color="#fb7185" title="亮紅"></button>
-          <button class="color-swatch w-5 h-5 rounded-full bg-white" data-color="#ffffff" title="純白"></button>
+      <div id="resultPanel">
+        <div id="transport" aria-label="播放控制">
+          <button id="btnPrev1" type="button" title="上一格（按住連續）">−1 格</button>
+          <button id="btnPlayPause" type="button"><span id="playIcon">▶ 播放</span></button>
+          <button id="btnNext1" type="button" title="下一格（按住連續）">+1 格</button>
+          <button id="btnSlow" type="button" aria-pressed="false">慢動作</button>
+        </div>
+
+        <p class="section-label">關鍵兩格（點一下跳過去）</p>
+        <div id="keyFrames">
+          <div class="key">
+            <button id="btnJumpFoot" class="key-jump" type="button"><span class="key-name">前腳落地</span><span id="footInfo" class="key-info">尋找中…</span></button>
+            <button id="btnMarkFoot" class="key-set" type="button">改成目前這格</button>
+          </div>
+          <div class="key">
+            <button id="btnJumpRelease" class="key-jump" type="button"><span class="key-name">出手</span><span id="releaseInfo" class="key-info">尋找中…</span></button>
+            <button id="btnMarkRelease" class="key-set" type="button">改成目前這格</button>
+          </div>
+        </div>
+        <p id="analysisCoverage" class="note warn hidden" aria-live="polite"></p>
+
+        <div id="resultActions">
+          <button id="btnShareResult" class="btn primary" type="button"><span id="btnShareResultText">分享結果圖給教練</span></button>
+          <p id="aiHandoffStatus" class="hint" aria-live="polite"></p>
+          <div class="more-links">
+            <button id="btnExportVideo" type="button"><span id="btnExportVideoText">存骨架影片</span></button>
+            <button id="btnShareAI" type="button"><span id="btnShareAIText">給 AI 的文字摘要</span></button>
+            <button id="btnRepick" type="button">重新選人</button>
+          </div>
+          <p class="fineprint">點畫面可隱藏／顯示骨架。結果是 AI 估計，用來和教練討論，不是評分或醫療判斷。</p>
         </div>
       </div>
-
-      <!-- Undo / Redo / Clear & Tool Instructions -->
-      <div class="flex items-center gap-1.5">
-        <span id="annotationInstruction" class="text-[11px] text-slate-400 hidden md:inline mr-1">點選工具在畫面上標記</span>
-        <button id="btnUndo" class="bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 transition" title="復原">
-          ↩ 復原
-        </button>
-        <button id="btnRedo" class="bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 transition" title="重做">
-          ↪ 重做
-        </button>
-        <button id="btnClearAnnotations" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-2.5 py-1.5 rounded-lg border border-slate-700 transition" title="清除所有標註">
-          清除
-        </button>
-      </div>
-    </div>
-
-        </details>
-      </aside>
     </section>
-    <div id="poseDiagnostics" role="status" aria-live="polite" style="padding:10px;background:#172033;color:#e2e8f0;font-size:13px;flex-shrink:0">
-      <span id="poseDetail">選擇影片後才載入本站 AI 模型；影片僅在此瀏覽器處理。</span>
-      <button id="btnRetryPose" type="button" style="margin-left:8px;padding:5px 10px;cursor:pointer" hidden>重新載入 AI</button>
-    </div>
-
-    <section id="resultsSection" aria-labelledby="resultsHeading">
-      <div id="resultsHeader">
-        <h2 id="resultsHeading">分析結果</h2>
-        <span id="timeFrameBadge">00:00.0 (0格)</span>
-      </div>
-    <div id="analysisCoverage" class="mt-3 rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-[11px] leading-relaxed text-slate-400" aria-live="polite">
-      載入影片並完成整段骨架分析後，這裡會顯示實際辨識覆蓋率。
-    </div>
-
-    <div id="exportActions" class="mt-4 grid gap-2">
-      <button id="btnShareAI" class="bg-lime-400 hover:bg-lime-300 active:scale-95 text-slate-950 text-sm font-bold px-4 py-3 rounded-lg transition">
-        <span id="btnShareAIText">分享分析給教練／AI</span>
-      </button>
-      <details id="moreExports" class="rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2">
-        <summary class="cursor-pointer text-xs font-semibold text-slate-300">更多輸出格式</summary>
-        <div class="mt-2 grid gap-2 sm:grid-cols-3">
-      <button id="btnExportPNG" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-100 text-xs font-semibold px-4 py-2.5 rounded-xl border border-slate-700 transition flex items-center gap-1.5 shadow-sm">
-        <span>目前畫面 PNG</span>
-      </button>
-
-      <button id="btnExportVideo" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-100 text-xs font-semibold px-4 py-2.5 rounded-lg border border-slate-700 transition">
-        <span id="btnExportVideoText">輸出骨架分析影片</span>
-      </button>
-      <button id="btnExportAI" class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-100 text-xs font-semibold px-4 py-2.5 rounded-lg border border-slate-700 transition">
-        <span>下載教練／AI 分析包</span>
-      </button>
-        </div>
-      </details>
-    </div>
-    <p class="mt-2 text-xs text-slate-400 leading-relaxed">只在你按下後開啟分享選單；分析包不含原始影片，也不會自動上傳。</p>
-    <p id="aiHandoffStatus" class="mt-1 text-[11px] text-sky-300" aria-live="polite"></p>
-
-    </section>
-
   </main>
 
-  <!-- Video Export Progress Modal -->
-  <div id="exportModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 max-w-sm w-full text-center shadow-2xl flex flex-col items-center">
-      <h3 class="text-base font-bold text-white mb-1">正在合成骨架影片</h3>
-      <p id="exportFormatNotice" class="text-xs text-slate-400 mb-4">格式偵測中...</p>
-      
-      <!-- Progress Bar -->
-      <div class="w-full bg-slate-800 h-2 rounded-full overflow-hidden mb-3">
-        <div id="exportProgressBar" class="bg-lime-400 h-full w-0 transition-all duration-100"></div>
-      </div>
-      <span id="exportProgressPercent" class="text-xs font-mono text-lime-300 mb-4">0%</span>
-
-      <button id="btnCancelExport" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-4 py-2 rounded-lg border border-slate-700">
-        取消匯出
-      </button>
+  <div id="exportModal" class="hidden" role="dialog" aria-label="正在製作骨架影片">
+    <div class="modal-card">
+      <h3>正在製作骨架影片</h3>
+      <p id="exportFormatNotice">格式偵測中…</p>
+      <div class="bar"><div id="exportProgressBar"></div></div>
+      <span id="exportProgressPercent">0%</span>
+      <button id="btnCancelExport" type="button">取消</button>
     </div>
   </div>
-
   <script>
     /* ==========================================================================
        投球逐格｜PitchFrame - 核心狀態與 DOM 元素
@@ -603,10 +355,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const video = document.getElementById('videoPlayer');
     const mainCanvas = document.getElementById('mainCanvas');
     const mainCtx = mainCanvas.getContext('2d');
-    const drawCanvas = document.getElementById('drawCanvas');
-    const drawCtx = drawCanvas.getContext('2d');
     const stageContainer = document.getElementById('stageContainer');
-    const emptyPrompt = document.getElementById('emptyPrompt');
 
     // UI Buttons & Inputs
     const cameraInput = document.getElementById('cameraInput');
@@ -618,43 +367,21 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const playIcon = document.getElementById('playIcon');
     const btnPrev1 = document.getElementById('btnPrev1');
     const btnNext1 = document.getElementById('btnNext1');
-    const btnLoop = document.getElementById('btnLoop');
-    const loopStatusText = document.getElementById('loopStatusText');
-    const sepTintCanvas = document.getElementById('sepTintCanvas');
-    const sepTintCtx = sepTintCanvas.getContext('2d');
+    const btnSlow = document.getElementById('btnSlow');
     const scrubber = document.getElementById('scrubber');
     const timeCurrent = document.getElementById('timeCurrent');
     const timeDuration = document.getElementById('timeDuration');
     const timeFrameBadge = document.getElementById('timeFrameBadge');
     const statusText = document.getElementById('statusText');
-    const statusDot = document.getElementById('statusDot');
-    const speedButtons = document.querySelectorAll('.speed-btn');
-    const btnToggleSkeleton = document.getElementById('btnToggleSkeleton');
-    const skeletonToggleText = document.getElementById('skeletonToggleText');
-    const btnToggleAngles = document.getElementById('btnToggleAngles');
-    const anglesToggleText = document.getElementById('anglesToggleText');
     const durationWarning = document.getElementById('durationWarning');
     const durationWarningText = document.getElementById('durationWarningText');
     const btnCloseWarning = document.getElementById('btnCloseWarning');
-    const fallbackNotice = document.getElementById('fallbackNotice');
 
-    // Annotation elements
-    const toolButtons = document.querySelectorAll('.tool-btn');
-    const colorSwatches = document.querySelectorAll('.color-swatch');
-    const btnUndo = document.getElementById('btnUndo');
-    const btnRedo = document.getElementById('btnRedo');
-    const btnClearAnnotations = document.getElementById('btnClearAnnotations');
-    const annotationInstruction = document.getElementById('annotationInstruction');
-    const textInputModal = document.getElementById('textInputModal');
-    const textInputContent = document.getElementById('textInputContent');
-    const btnConfirmText = document.getElementById('btnConfirmText');
-    const btnCancelText = document.getElementById('btnCancelText');
-
-    // Export elements
-    const btnExportPNG = document.getElementById('btnExportPNG');
+    // Result & export elements
+    const btnShareResult = document.getElementById('btnShareResult');
+    const btnShareResultText = document.getElementById('btnShareResultText');
     const btnExportVideo = document.getElementById('btnExportVideo');
     const btnExportVideoText = document.getElementById('btnExportVideoText');
-    const btnExportAI = document.getElementById('btnExportAI');
     const btnShareAI = document.getElementById('btnShareAI');
     const btnShareAIText = document.getElementById('btnShareAIText');
     const aiHandoffStatus = document.getElementById('aiHandoffStatus');
@@ -669,19 +396,18 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
        狀態變數
        ========================================================================== */
     let isPlaying = false;
-    let isLooping = true;
+    const isLooping = true;
     let currentSpeed = 1.0;
     let estimatedFps = 30;
     const fallbackFrameDuration = 1 / 30;
     let sourceFrameIndex = null;
     let frameIndexPending = false;
-    const sourceFrameStatus = document.getElementById("sourceFrameStatus");
     let videoDuration = 0;
     let effectiveDuration = 0;
     let isTimelineDragging = false;
     let timelineSeekTarget = null;
     let showSkeleton = true;
-    let showAngleBadges = true;
+    const showAngleBadges = true;
     const isMobileDevice = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent || '')
       || (navigator.maxTouchPoints > 1 && Math.min(window.screen.width, window.screen.height) < 900);
     const INFERENCE_MAX_EDGE = isMobileDevice ? 480 : 640;
@@ -699,20 +425,23 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const inferenceCanvas = document.createElement('canvas');
     const inferenceCtx = inferenceCanvas.getContext('2d');
     const poseDetail = document.getElementById('poseDetail');
+    const poseError = document.getElementById('poseError');
     const retryPoseButton = document.getElementById('btnRetryPose');
+    // 介面一次只出現一個步驟：capture（拍攝）→ analyze（分析）→ result（結果）
+    function setStep(step) {
+      if (document.body.dataset.step === step) return;
+      document.body.dataset.step = step;
+      if (step !== 'capture') requestAnimationFrame(resizeCanvases);
+    }
+    function setHint(text) { statusText.textContent = text; }
+    // 一般狀態不打擾家長；只有失敗時才顯示原因與重試按鈕
     function reportPoseStatus(label, detail, failed = false) {
-      statusText.textContent = label;
-      poseDetail.textContent = detail;
-      retryPoseButton.hidden = !failed;
-      statusDot.className = 'w-2 h-2 rounded-full ' + (failed ? 'bg-rose-400' : 'bg-sky-400');
+      if (!failed) return;
+      poseDetail.textContent = `${label}：${detail}`;
+      poseError.hidden = false;
+      retryPoseButton.hidden = false;
     }
-    // 查表命中時更新狀態，不再停在「正在更新目前影格」
-    function reportFrameReady(landmarks) {
-      const label = landmarks ? '骨架就緒' : '這一格沒有偵測到球員';
-      if (statusText.textContent === label) return;
-      reportPoseStatus(label, landmarks ? '顯示的是這一格本身的骨架。' : '這一格沒有找到你選的球員，因此不畫骨架。');
-      statusDot.className = 'w-2 h-2 rounded-full ' + (landmarks ? 'bg-emerald-400' : 'bg-slate-500');
-    }
+    function clearPoseError() { poseError.hidden = true; retryPoseButton.hidden = true; poseDetail.textContent = ''; }
     function withPoseTimeout(promise, milliseconds, message) {
       let timer;
       return Promise.race([promise, new Promise((_, reject) => {
@@ -982,18 +711,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
     function renderAnalysisCoverage() {
       const quality = analysisCoverageSnapshot();
-      if (!quality.analysisComplete) {
-        analysisCoverage.textContent = '載入影片並完成整段骨架分析後，這裡會顯示實際辨識覆蓋率。';
-        analysisCoverage.className = 'mt-3 rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-[11px] leading-relaxed text-slate-400';
-        return;
+      // 只在骨架抓得不夠時說一句白話；覆蓋率細節留在 AI 摘要裡
+      const weak = quality.analysisComplete && quality.detectedRatio !== null && quality.detectedRatio < quality.operationalThreshold;
+      analysisCoverage.classList.toggle('hidden', !weak);
+      if (weak) {
+        const missed = 100 - Math.round(quality.detectedRatio * 100);
+        analysisCoverage.textContent = `約 ${missed}% 的畫面沒抓到孩子，結果僅供參考。建議從側面、全身入鏡重拍一次。`;
       }
-      const pct = quality.detectedRatio === null ? 0 : Math.round(quality.detectedRatio * 100);
-      analysisCoverage.textContent = quality.readyForAutomatedSummary
-        ? `骨架辨識覆蓋 ${pct}%（${quality.detectedFrames}/${quality.analyzedFrames} 個取樣點）；落地與出手格都有骨架。可進一步人工判讀。`
-        : `骨架辨識覆蓋 ${pct}%（${quality.detectedFrames}/${quality.analyzedFrames} 個取樣點）；資料尚不足以自動提出動作摘要。請確認落地／出手或重拍清楚影片。`;
-      analysisCoverage.className = quality.readyForAutomatedSummary
-        ? 'mt-3 rounded-lg border border-lime-500/40 bg-lime-500/10 px-3 py-2 text-[11px] leading-relaxed text-lime-200'
-        : 'mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-200';
     }
 
     function waitForMediaEvent(media, eventName, milliseconds, message) {
@@ -1029,9 +753,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
     function reportAnalysisProgress(job) {
       const pct = Math.floor(job.done / job.total * 100);
-      showPill(`骨架分析中 ${pct}%`);
-      reportPoseStatus(`骨架分析中 ${pct}%`,
-        `已分析 ${job.done}／${job.total} 個取樣點。播放與逐格時，尚未取樣的影格會依需要即時分析。`);
+      showPill(`分析中 ${pct}%`);
+      setHint('AI 正在逐格找出骨架，通常 10 到 30 秒。影片不會上傳。');
     }
 
     function cancelTrackAnalysis() {
@@ -1057,12 +780,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const btnRepick = document.getElementById('btnRepick');
     function hasTargetChoice() { return !!(targetChoice && targetChoice.source === sourceGeneration); }
     function showPickOverlay(title, sub) {
-      pickTitle.textContent = title || '點一下要分析的球員';
-      pickSub.textContent = sub || '看不到他？先拖時間軸換一格再點';
+      pickTitle.textContent = title || '點一下你的孩子';
+      pickSub.textContent = sub || '看不到他？先拖下面的時間軸換一格再點';
       pickOverlay.classList.remove('hidden');
-      btnRepick.classList.add('hidden');
       showPill('');
-      reportPoseStatus('請選擇球員', '在影片上點一下要分析的球員；畫面裡只有他一人時可按「畫面只有他一人」。');
+      setStep('analyze');
+      setHint(sub || '在畫面上點一下孩子，AI 會一路追蹤他。看不到他？先拖時間軸換一格再點。');
     }
     function hidePickOverlay() { pickOverlay.classList.add('hidden'); }
     function chooseTarget(choice) {
@@ -1074,8 +797,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       hasEverDetectedRealPerson = false; smoothedCalloutBox = null;
       targetChoice = { source: sourceGeneration, ...choice };
       hidePickOverlay();
-      btnRepick.classList.remove('hidden');
-      showPill(choice.mode === 'point' ? '正在找你點的球員…' : '準備分析…');
+      showPill(choice.mode === 'point' ? '正在找你點的孩子…' : '準備分析…');
+      setHint(isPoseModelReady ? 'AI 正在逐格找出骨架，通常 10 到 30 秒。影片不會上傳。' : '正在載入 AI 模型（第一次約 24 MB），載入後自動開始分析。');
       renderStage();
       startTrackAnalysis();
     }
@@ -1092,6 +815,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     btnPickWhole.addEventListener('click', (e) => { e.stopPropagation(); chooseTarget({ mode: 'full', time: 0 }); });
     btnRepick.addEventListener('click', () => {
       if (!video.videoWidth) return;
+      clearPoseError();
       if (isPlaying) pauseVideo(false, false);
       cancelTrackAnalysis();
       poseCache.clear(); worldCache.clear(); resetSeparation();
@@ -1246,7 +970,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           }
           if (!seed || seed.score >= 10) {
             trackJob = null; targetChoice = null;
-            showPickOverlay('這裡沒有找到球員', '請點在他身上，或換一格他比較清楚的畫面再點');
+            showPickOverlay('這裡沒有找到孩子', '請點在他身上，或拖時間軸換一格他比較清楚的畫面再點。');
             renderStage();
             return;
           }
@@ -1294,9 +1018,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         job.complete = true;
         setAnalyzedSpan(0, 1);
         showPill('');
-        reportPoseStatus('骨架分析完成',
-          `整段 ${job.total} 個取樣點已分析。播放、慢動作、逐格與拖曳到未取樣影格時會即時補分析${hasEverDetectedRealPerson ? '' : '；但取樣點都沒有偵測到人物'}。`);
-        statusDot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+        setStep('result');
         renderStage();
         renderAnalysisCoverage();
       } catch (err) {
@@ -1305,24 +1027,15 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         job.running = false;
         job.failed = true;
         showPill('');
-        reportPoseStatus('骨架整段分析中斷',
-          String(err.message || err) + '。已完成的部分仍可使用；可按「重新選擇球員」或「重新載入 AI」重試。', true);
+        reportPoseStatus('分析中斷',
+          String(err.message || err) + '。已完成的部分仍可使用；可按「重新選人」或「重新載入 AI」重試。', true);
+        setStep('result');
       } finally {
         if (engine === pose && choice.mode === 'point') {
           try { engine.setOptions({ smoothLandmarks: true }); } catch (_) {}
         }
       }
     }
-
-    // Annotation state
-    let activeTool = null; // 'line', 'arrow', 'circle', 'text'
-    let activeColor = '#bef264';
-    let annotations = []; // Array of { type, x1, y1, x2, y2, color, text } (normalized 0..1)
-    let undoStack = [];
-    let redoStack = [];
-    let isDrawing = false;
-    let drawStartPoint = null;
-    let pendingTextPos = null;
 
     // Video Blob URL lifecycle tracking
     let currentVideoObjectUrl = null;
@@ -1424,6 +1137,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
     retryPoseButton.addEventListener('click', async () => {
       if (poseInitPromise) return;
+      clearPoseError();
       ++poseEpoch; clearPlaybackPair(); cancelTrackAnalysis();
       isPoseModelReady = false; isProcessingPose = false; activePoseJob = null; lastSentFrame = null;
       const oldPose = pose; pose = null;
@@ -1462,9 +1176,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         lastValidTime = curTime;
         poseCache.set(frameKey, currentLandmarks);
         worldCache.set(frameKey, results.poseWorldLandmarks ? results.poseWorldLandmarks.map(p => ({ ...p })) : null);
-        fallbackNotice.classList.add('hidden');
-        reportPoseStatus('AI 骨架追蹤中', `已辨識影格 ${curTime.toFixed(3)} 秒。${showSkeleton ? '' : '骨架顯示目前已關閉，請開啟「顯示骨架」。'}`);
-        statusDot.className = "w-2 h-2 rounded-full bg-emerald-400";
       } else {
         // 當前影格未辨識到人物，不繪製虛構骨架，仍記錄已分析狀態供循環播放跳過重複推論
         poseCache.set(frameKey, null);
@@ -1486,7 +1197,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     function handleMissedPoseFrame(curTime, frameKey) {
       currentLandmarks = null;
       isCurrentLandmarkEstimated = false;
-      fallbackNotice.classList.add('hidden');
       reportPoseStatus('已分析但未偵測到人物', `已完成分析，${curTime.toFixed(3)} 秒未偵測到人物骨架。請播放或換到人物清楚的影格；不以預設骨架替代。`);
     }
 
@@ -1502,7 +1212,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         currentLandmarks = cached;
         currentPoseStamp = stamp;
         lastSentFrame = stamp.source + ':' + stamp.seek + ':' + stamp.time.toFixed(6);
-        if (!isPlaying && !analysisActive()) reportFrameReady(cached);
         renderStage();
         return;
       }
@@ -1590,19 +1299,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
       poseCache.clear(); worldCache.clear(); resetSeparation();
       resetAnalysisVideo();
-      targetChoice = null; hidePickOverlay(); btnRepick.classList.add('hidden');
+      targetChoice = null; hidePickOverlay();
       smoothedCalloutBox = null;
       hasEverDetectedRealPerson = false;
       lastValidLandmarks = null;
       currentLandmarks = null;
       currentPoseStamp = null;
       presentedFrame = null;
-
-      annotations = [];
-      undoStack = [];
-      redoStack = [];
-      updateUndoRedoButtons();
-      renderAnnotations();
 
       if (mainCanvas.width && mainCanvas.height) {
         mainCtx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
@@ -1613,25 +1316,18 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       scrubber.value = 0;
       timeCurrent.textContent = '00:00';
       timeDuration.textContent = '00:00';
-      timeFrameBadge.textContent = '00:00.0';
-      sourceFrameStatus.textContent = '尚未載入影片';
+      timeFrameBadge.textContent = '第 1 格';
       playIcon.textContent = '▶ 播放';
-      btnPlayPause.classList.replace('bg-amber-400', 'bg-lime-400');
-      btnPlayPause.classList.replace('hover:bg-amber-300', 'hover:bg-lime-300');
+      aiHandoffStatus.textContent = '';
 
       durationWarning.classList.add('hidden');
-      fallbackNotice.classList.add('hidden');
-      textInputModal.classList.add('hidden');
-      btnClearVideo.classList.add('hidden');
-      emptyPrompt.classList.remove('hidden');
+      clearPoseError();
+      setStep('capture');
 
       cameraInput.value = '';
       fileInput.value = '';
       updateTelemetryAndCounters();
-      reportPoseStatus(
-        isPoseModelReady ? 'AI 模型已就緒' : '等待影片輸入',
-        '已清除目前影片，請拍攝或選擇新影片。'
-      );
+      window.scrollTo(0, 0);
     }
 
     btnClearVideo.addEventListener('click', (e) => {
@@ -1641,30 +1337,26 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     function handleVideoFile(file) {
       if (!file) return;
+      clearPoseError();
+      setStep('analyze');
+      window.scrollTo(0, 0);
+      setHint('讀取影片中…');
       if (!isPoseModelReady && !poseInitPromise) initMediaPipe();
-      btnClearVideo.classList.remove('hidden');
       endScrubSession();
       ++sourceGeneration; ++playbackGeneration; isPlaying = false; invalidatePosePresentation(); lastSentFrame = null;
       const openedSource = sourceGeneration;
       sourceFrameIndex = null; frameIndexPending = true;
-      sourceFrameStatus.textContent = '正在讀取原始影格索引…';
       isTimelineDragging = false; timelineSeekTarget = null;
-      emptyPrompt.classList.add('hidden');
-      statusText.textContent = "載入影片中...";
-      statusDot.className = "w-2 h-2 rounded-full bg-yellow-400 animate-pulse";
+      aiHandoffStatus.textContent = '';
       
       // 重置狀態
       poseCache.clear(); worldCache.clear(); resetSeparation();
       cancelTrackAnalysis();
-      targetChoice = null; hidePickOverlay(); btnRepick.classList.add('hidden');
+      targetChoice = null; hidePickOverlay();
       smoothedCalloutBox = null;
       hasEverDetectedRealPerson = false;
       lastValidLandmarks = null;
       currentLandmarks = null;
-      annotations = [];
-      undoStack = [];
-      redoStack = [];
-      updateUndoRedoButtons();
 
       const previousObjectUrl = currentVideoObjectUrl;
       const objectUrl = URL.createObjectURL(file);
@@ -1684,10 +1376,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         getPitchFrameIndex(file, videoDuration).then(index => {
           if (openedSource !== sourceGeneration) return;
           frameIndexPending = false; sourceFrameIndex = index;
-          sourceFrameStatus.textContent = index ? (index.variableFrameRate
-            ? '已讀取原始影格｜可變幀率'
-            : `已讀取原始影格｜${Number(index.fps?.toFixed(2)) || '未標稱'} fps`)
-            : '此格式沒有可用的影格索引｜±1 約 0.033 秒';
           renderStage();
           startTrackAnalysis();
         });
@@ -1695,7 +1383,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         // 檢查 30 秒限制
         if (videoDuration > MAX_ALLOWED_DURATION) {
           effectiveDuration = MAX_ALLOWED_DURATION;
-          durationWarningText.textContent = `影片長度為 ${videoDuration.toFixed(1)} 秒，已超過 30 秒上限。為保持流暢分析，系統已為您截取前 30 秒。`;
+          durationWarningText.textContent = `影片有 ${videoDuration.toFixed(0)} 秒，只會分析前 30 秒。`;
           durationWarning.classList.remove('hidden');
         } else {
           effectiveDuration = videoDuration;
@@ -1704,9 +1392,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
         // 舞台容器完全依照影片真實寬高比，不改變比例、不做任何裁切
         stageContainer.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
-        stageContainer.style.maxWidth = '100%';
-        stageContainer.style.maxHeight = '72vh';
-        stageContainer.style.margin = '0 auto';
 
         resizeCanvases();
         timeDuration.textContent = formatTime(effectiveDuration);
@@ -1720,9 +1405,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
       video.onerror = (e) => {
         console.error("Video load error:", video.error);
-        emptyPrompt.classList.remove('hidden');
-        statusText.textContent = "影片無法開啟或格式不支援";
-        statusDot.className = "w-2 h-2 rounded-full bg-rose-400";
+        setStep('capture');
         alert("無法開啟此影片。\n\n可能原因：\n1. 影片格式或編碼（例如 iPhone 預設 HEVC/H.265 或 ProRes）瀏覽器不支援原生解碼。\n2. 檔案權限受限或格式損毀。\n\n建議：請在手機或電腦選用標準 MP4 (H.264) 格式影片，或使用手機瀏覽器直接拍攝。");
       };
     }
@@ -1736,13 +1419,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (mainCanvas.width !== w || mainCanvas.height !== h) {
         mainCanvas.width = w;
         mainCanvas.height = h;
-        drawCanvas.width = w;
-        drawCanvas.height = h;
-        sepTintCanvas.width = w;
-        sepTintCanvas.height = h;
       }
       renderStage();
-      renderAnnotations();
     }
 
     window.addEventListener('resize', resizeCanvases);
@@ -1836,25 +1514,19 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
 
     /* ==========================================================================
-       髖肩分離（AI 推測，不顯示度數）
-       - 兩肩、兩髖四點的相對旋轉以灰→藍呈現；顏色只表示模型內部趨勢，不代表技術好壞。以「髖中點→肩中點」為脊椎軸，
+       前腳落地／出手事件與旋轉差估計（介面不顯示旋轉差，只寫入給 AI 的文字摘要）
+       - 以「髖中點→肩中點」為脊椎軸，
          把肩線、髖線投影到垂直脊椎的平面上，兩線夾角就是扭轉；可扣掉軀幹前傾／側傾。
        - 深度是 MediaPipe 從單一畫面推測的，只當趨勢看，所以只呈現顏色與時機，不顯示數字。
        - 看的重點依同儕審查研究：前腳落地附近的骨盆－上軀幹旋轉差，以及近端到遠端的動作順序。
        - 門檻只用來抑制低幅度推測雜訊，不是適用任何年齡的生物力學標準值。
        ========================================================================== */
     const SEP_MIN_VIS = 0.5, SEP_ON_DEG = 10, SEP_FULL_DEG = 35;
-    const SEP_LOW = [203, 213, 225], SEP_HIGH = [34, 211, 238], SEP_ALPHA = 0.85; // 灰 → 藍，只表示相對趨勢；不使用紅綠好壞語意
-    let separationEnabled = true;
-    try { separationEnabled = localStorage.getItem('pf-separation') !== '0'; } catch (_) {}
     let sepCache = null, manualFoot = null, manualRelease = null;
-    const btnSeparation = document.getElementById('btnSeparation');
-    const separationStatusText = document.getElementById('separationStatusText');
-    const sepPanel = document.getElementById('sepPanel');
-    const sepVerdict = document.getElementById('sepVerdict');
-    const sepBadge = document.getElementById('sepBadge');
-    const sepStripRow = document.getElementById('sepStripRow');
-    const sepStrip = document.getElementById('sepStrip');
+    const btnJumpFoot = document.getElementById('btnJumpFoot');
+    const btnJumpRelease = document.getElementById('btnJumpRelease');
+    const footInfo = document.getElementById('footInfo');
+    const releaseInfo = document.getElementById('releaseInfo');
 
     function resetSeparation() { sepCache = null; manualFoot = null; manualRelease = null; }
     const v3 = {
@@ -1884,10 +1556,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
     function median(arr) { const a = arr.slice().sort((x, y) => x - y); return a[a.length >> 1]; }
     function sepLevel(deg) { return deg === null ? null : Math.max(0, Math.min(1, (deg - SEP_ON_DEG) / (SEP_FULL_DEG - SEP_ON_DEG))); }
-    function sepColor(t, alpha) {
-      const c = SEP_LOW.map((w, i) => Math.round(w + (SEP_HIGH[i] - w) * t));
-      return `rgba(${c[0]},${c[1]},${c[2]},${alpha})`;
-    }
     function sepKeyTime(key) { return sourceFrameIndex ? sourceFrameIndex.seekTime(key) : key * fallbackFrameDuration; }
 
     // 前腳落地：「最先」大幅水平移動的腳踝就是跨步腳（後腳在出手後的跟進也會大幅移動，
@@ -1905,7 +1573,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
 
     function getSeparation() {
-      if (!separationEnabled || !video.videoWidth) return null;
+      if (!video.videoWidth) return null;
       const stamp = `${sourceGeneration}|${trackJob ? trackJob.done : 0}|${poseCache.size}|${manualFoot}|${manualRelease}`;
       if (sepCache && sepCache.stamp === stamp) return sepCache;
       const keys = [...worldCache.keys()].filter(k => poseCache.has(k)).sort((a, b) => a - b);
@@ -1916,7 +1584,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         return win.length >= 3 ? median(win) : null; });
       const level = new Map(), signed = new Map();
       keys.forEach((k, i) => { level.set(k, sepLevel(deg[i])); if (raw[i]) signed.set(k, raw[i].signed); });
-      const ev = trackComplete() || !hasTargetChoice() ? detectEvents(keys) : { foot: null, release: null };
+      // 事件偵測只用整段分析的等間隔取樣點（偵測器以 ANALYSIS_SAMPLE_FPS 計算速度）。
+      // 播放或逐格時即時補分析的影格不加入，否則自動找到的落地／出手會隨播放跳動。
+      const sampledKeys = trackJob && trackJob.source === sourceGeneration && trackJob.sampledKeys
+        ? trackJob.sampledKeys.filter(k => poseCache.has(k)) : keys;
+      const ev = trackComplete() || !hasTargetChoice() ? detectEvents(sampledKeys) : { foot: null, release: null };
       const foot = manualFoot !== null ? manualFoot : ev.foot;
       const release = manualRelease !== null ? manualRelease : ev.release;
       let footLevel = null;
@@ -1927,116 +1599,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       sepCache = { stamp, keys, level, signed, foot, release, footLevel, manual: manualFoot !== null,
         manualFoot: manualFoot !== null, manualRelease: manualRelease !== null,
         strideAnkleIndex: ev.strideAnkleIndex ?? null, wristIndex: ev.wristIndex ?? null, wristSource: ev.wristSource ?? null, eventReason: ev.reason || null };
-      drawSeparationStrip();
-      updateSeparationPanel();
       return sepCache;
     }
 
-    function updateSeparationPanel() {
-      const on = separationEnabled && !!video.videoWidth && hasTargetChoice();
-      sepPanel.classList.toggle('hidden', !on);
-      sepStripRow.classList.toggle('hidden', !on);
-      if (!on || !sepCache) return;
-      const done = trackComplete() || !hasTargetChoice();
-      let html, border = '#334155';
-      if (!done) html = '骨架分析完成後，會自動找出前腳落地那一格。';
-      else if (sepCache.foot === null) html = '<b>找不到前腳落地</b><br><span class="text-slate-400">請逐格到前腳剛踩地的那一格，按「這格設為落地」。</span>';
-      else if (sepCache.footLevel === null) html = '<b>落地這幾格判斷不了</b><br><span class="text-slate-400">肩或髖被擋住、骨架不清楚，所以不上色、不猜。可換一格按「這格設為落地」。</span>';
-      else if (sepCache.footLevel >= 0.5) { border = '#22d3ee';
-        html = '<b>落地附近：模型估計旋轉差趨勢較明顯</b><br><span class="text-slate-400">這只是單機位相對趨勢，不代表做得好、球速更快或受傷風險更低。請逐格確認肩髖點位，再交給教練結合完整動作判讀。</span>'; }
-      else html = '<b>落地附近：模型未見明顯旋轉差趨勢</b><br><span class="text-slate-400">可能是實際差異較小，也可能受拍攝角度、遮擋或深度估計影響；不能據此要求孩子增加扭轉。</span>';
-      if (done && sepCache.foot !== null) html += `<br><span class="text-slate-500 text-[11px]">落地點：${sepCache.manualFoot ? '手動標記' : 'AI 自動估計'}；出手點：${sepCache.release === null ? '尚未找到' : sepCache.manualRelease ? '手動標記' : 'AI 自動估計'}。不正確可逐格後手動改。</span>`;
-      sepVerdict.innerHTML = html;
-      sepVerdict.style.borderColor = border;
-    }
-
-    function drawSeparationStrip() {
-      if (!sepStrip || sepStripRow.classList.contains('hidden') && !separationEnabled) return;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
-      const w = Math.max(1, Math.round(sepStrip.clientWidth * dpr)), h = Math.max(1, Math.round(18 * dpr));
-      if (sepStrip.width !== w || sepStrip.height !== h) { sepStrip.width = w; sepStrip.height = h; }
-      const ctx = sepStrip.getContext('2d');
-      ctx.clearRect(0, 0, w, h);
-      const sep = sepCache; if (!sep || !sep.keys.length) return;
-      const y0 = 4 * dpr, bh = h - 8 * dpr;
-      ctx.fillStyle = 'rgba(226,232,240,0.12)'; ctx.fillRect(0, y0, w, bh);
-      const duration = Math.max(0.001, effectiveDuration);
-      const cell = Math.max(1, w / Math.max(1, duration * ANALYSIS_SAMPLE_FPS));
-      for (const k of sep.keys) {
-        const t = sep.level.get(k); if (t === null || t === undefined) continue;
-        ctx.fillStyle = sepColor(t, 0.85);
-        ctx.fillRect(sepKeyTime(k) / duration * w, y0, Math.ceil(cell), bh);
-      }
-      if (sep.release !== null) {
-        const x = sepKeyTime(sep.release) / duration * w;
-        ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2 * dpr; ctx.setLineDash([3 * dpr, 3 * dpr]);
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); ctx.setLineDash([]);
-      }
-      if (sep.foot !== null) {
-        const x = sepKeyTime(sep.foot) / duration * w;
-        ctx.fillStyle = '#020617'; ctx.strokeStyle = '#f8fafc'; ctx.lineWidth = 2.5 * dpr;
-        ctx.beginPath(); ctx.arc(x, h / 2, 6 * dpr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-      }
-    }
-
-
-    /* 旋轉差模型訊號：只用灰→藍顏色。畫在 sepTintCanvas（mix-blend-mode: multiply），透明度固定；
-       顏色只表示同一段影片內的相對變化，不代表好壞或真實物理量，並保留球員衣服與輪廓可見性。
-       程度來自 sepLevel（推測旋轉差經平滑後的 0..1），不畫線、不顯示數字。
-       c = [左肩, 右肩, 右髖, 左髖]（畫面座標） */
-    function drawTwistFill(ctx, c, t) {
-      ctx.save();
-      ctx.beginPath(); c.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath();
-      ctx.fillStyle = sepColor(t, SEP_ALPHA);
-      ctx.fill();
-      ctx.restore();
-    }
-
-    function drawSeparationOverlay(ctx, lm) {
-      const sep = getSeparation(); if (!sep || !lm) return;
-      const key = getPoseCacheKey(displayedFrameTime());
-      const pts = [11, 12, 24, 23].map(i => lm[i]);
-      if (!pts.every(p => p && credibleBodyPoint(p))) return;
-      const c = pts.map(p => mapVideoToCanvas(p.x, p.y, ctx.canvas));
-      const t = sep.level.get(key);
-      ctx.save();
-      if (t === null || t === undefined) {
-        ctx.beginPath(); c.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.closePath();
-        ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(148,163,184,0.8)'; ctx.lineWidth = 2; ctx.stroke();
-      } else {
-        drawTwistFill(sepTintCtx, c, t);
-      }
-      ctx.restore();
-      // 俯視示意：沿脊椎往下看，白線＝髖、灰線＝肩；色塊只呈現模型相對訊號
-      const sg = sep.signed.get(key);
-      if (sg !== undefined && t !== null && t !== undefined) {
-        const dpr = ctx.canvas.width / Math.max(1, ctx.canvas.clientWidth || ctx.canvas.width);
-        const r = 34 * dpr, b = getRenderBounds(ctx.canvas);
-        const cx = b.destX + b.destW - r - 14 * dpr, cy = b.destY + r + 14 * dpr;
-        const hipA = -Math.PI / 6, shA = hipA + sg * Math.PI / 180;
-        ctx.save();
-        ctx.fillStyle = 'rgba(2,6,23,0.8)'; ctx.beginPath(); ctx.arc(cx, cy, r + 6 * dpr, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#334155'; ctx.lineWidth = 1.5 * dpr; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = sepColor(t, SEP_ALPHA + 0.2);
-        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r * 0.9, Math.min(hipA, shA), Math.max(hipA, shA)); ctx.closePath(); ctx.fill();
-        const line = (a, col) => { ctx.strokeStyle = col; ctx.lineWidth = 4 * dpr; ctx.lineCap = 'round';
-          ctx.beginPath(); ctx.moveTo(cx - Math.cos(a) * r * 0.85, cy - Math.sin(a) * r * 0.85); ctx.lineTo(cx + Math.cos(a) * r * 0.85, cy + Math.sin(a) * r * 0.85); ctx.stroke(); };
-        line(shA, '#94a3b8'); line(hipA, '#f8fafc');
-        ctx.fillStyle = '#cbd5e1'; ctx.font = `${11 * dpr}px "Noto Sans TC", system-ui, sans-serif`; ctx.textAlign = 'center';
-        ctx.fillText('俯視：白＝髖 灰＝肩', cx, cy + r + 18 * dpr);
-        ctx.restore();
-      }
-    }
-    function updateSeparationBadge() {
-      const sep = separationEnabled ? sepCache : null;
-      const key = getPoseCacheKey(displayedFrameTime());
-      const show = !!(sep && sep.foot !== null && Math.abs(key - sep.foot) <= 1 && showSkeleton);
-      sepBadge.classList.toggle('hidden', !show);
-      if (!show) return;
-      if (sep.footLevel === null) { sepBadge.textContent = '前腳落地：這幾格判斷不了'; sepBadge.style.borderColor = '#64748b'; }
-      else if (sep.footLevel >= 0.5) { sepBadge.textContent = '落地附近：旋轉差趨勢較明顯（估計）'; sepBadge.style.borderColor = '#22d3ee'; }
-      else { sepBadge.textContent = '落地附近：未見明顯旋轉差趨勢（估計）'; sepBadge.style.borderColor = '#cbd5e1'; }
-    }
     function jumpToKey(key) {
       if (key === null || key === undefined || !effectiveDuration) return;
       endScrubSession();
@@ -2046,22 +1611,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       video.currentTime = target;
       if (!video.seeking) { timelineSeekTarget = null; observePresentedFrame(); triggerPoseInference(); renderStage(); }
     }
-    function syncSeparationButton() {
-      separationStatusText.textContent = `髖肩分離: ${separationEnabled ? '開' : '關'}`;
-      btnSeparation.classList.toggle('text-lime-300', separationEnabled);
-      btnSeparation.classList.toggle('text-slate-400', !separationEnabled);
-    }
-    syncSeparationButton();
-    btnSeparation.addEventListener('click', () => {
-      separationEnabled = !separationEnabled;
-      try { localStorage.setItem('pf-separation', separationEnabled ? '1' : '0'); } catch (_) {}
-      syncSeparationButton();
-      sepCache = null;
-      if (!separationEnabled) { sepPanel.classList.add('hidden'); sepStripRow.classList.add('hidden'); sepBadge.classList.add('hidden'); }
-      renderStage();
-    });
-    document.getElementById('btnJumpFoot').addEventListener('click', () => { const s = getSeparation(); if (s) jumpToKey(s.foot); });
-    document.getElementById('btnJumpRelease').addEventListener('click', () => { const s = getSeparation(); if (s) jumpToKey(s.release); });
+    btnJumpFoot.addEventListener('click', () => { const s = getSeparation(); if (s) jumpToKey(s.foot); });
+    btnJumpRelease.addEventListener('click', () => { const s = getSeparation(); if (s) jumpToKey(s.release); });
     function currentManualEventKey() {
       // Prefer the exact decoded frame that produced the visible skeleton. video.currentTime can
       // differ slightly from requestVideoFrameCallback mediaTime and otherwise point at a cache miss.
@@ -2080,15 +1631,20 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       manualRelease = currentManualEventKey();
       sepCache = null; renderStage(); renderAnalysisCoverage();
     });
-    document.getElementById('btnResetEvents').addEventListener('click', () => {
-      manualFoot = null; manualRelease = null; sepCache = null; renderStage(); renderAnalysisCoverage();
-    });
-    sepStrip.addEventListener('click', (e) => {
-      const rect = sepStrip.getBoundingClientRect();
-      const lastKey = getPoseCacheKey(Math.max(0, effectiveDuration - 0.000001)) || 1;
-      jumpToKey(Math.max(0, Math.min(lastKey, Math.floor((e.clientX - rect.left) / Math.max(1, rect.width) * (lastKey + 1)))));
-    });
-    window.addEventListener('resize', () => drawSeparationStrip());
+    function updateEventChips(sep) {
+      const current = video.videoWidth ? currentManualEventKey() : null;
+      const show = (button, info, key, manual) => {
+        if (key === null || key === undefined) {
+          info.textContent = trackComplete() ? '沒找到，請手動標記' : '尋找中…';
+          button.classList.remove('is-current');
+          return;
+        }
+        info.textContent = `第 ${key + 1} 格・${manual ? '你標記的' : 'AI 估計'}`;
+        button.classList.toggle('is-current', current === key);
+      };
+      show(btnJumpFoot, footInfo, sep ? sep.foot : null, sep && sep.manualFoot);
+      show(btnJumpRelease, releaseInfo, sep ? sep.release : null, sep && sep.manualRelease);
+    }
 
     function renderStage() {
       if (!mainCanvas.width || !mainCanvas.height) return;
@@ -2096,7 +1652,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const ch = mainCanvas.height;
 
       mainCtx.clearRect(0, 0, cw, ch);
-      sepTintCtx.clearRect(0, 0, sepTintCanvas.width, sepTintCanvas.height);
       if (scrubSession && scrubPair && scrubPair.source === sourceGeneration) {
         const bounds = getRenderBounds(mainCanvas);
         mainCtx.fillStyle = '#020617'; mainCtx.fillRect(0,0,cw,ch);
@@ -2141,11 +1696,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         heldSkeleton = { source: sourceGeneration, landmarks: renderLandmarks };
       }
       if (renderLandmarks && renderLandmarks.length >= 25) {
-        if (separationEnabled) drawSeparationOverlay(mainCtx, renderLandmarks);
         drawSimplifiedBaseballSkeleton(mainCtx, renderLandmarks, isCurrentLandmarkEstimated);
       }
-      if (separationEnabled) { getSeparation(); updateSeparationPanel(); updateSeparationBadge(); }
-      else sepBadge.classList.add('hidden');
+      updateEventChips(getSeparation());
 
       // 4. 更新遙測條與時間格計數
       updateTelemetryAndCounters();
@@ -2736,7 +2289,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const visiblePlayPair = pairedPlaybackActive() ? playPair : null;
       const curTime = timelineSeekTarget !== null ? timelineSeekTarget : (visiblePlayPair ? visiblePlayPair.time : displayedFrameTime());
       const curFrame = sourceFrameIndex ? sourceFrameIndex.frameAt(curTime) : -1;
-      timeFrameBadge.textContent = `${formatTime(curTime)}${curFrame >= 0 ? `（第 ${curFrame + 1} 格）` : ''}`;
+      timeFrameBadge.textContent = `第 ${(curFrame >= 0 ? curFrame : Math.round(curTime / fallbackFrameDuration)) + 1} 格`;
       timeCurrent.textContent = formatTime(curTime);
 
       if (!isTimelineDragging && timelineSeekTarget === null && effectiveDuration > 0) {
@@ -2757,12 +2310,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       clearPlaybackPair(); seedPlaybackPair();
       const playbackToken = ++playbackGeneration;
       const playbackSource = sourceGeneration;
+      video.playbackRate = currentSpeed;
       video.play().then(() => {
         if (playbackToken !== playbackGeneration || playbackSource !== sourceGeneration) return;
         isPlaying = true;
         playIcon.textContent = "⏸ 暫停";
-        btnPlayPause.classList.replace('bg-lime-400', 'bg-amber-400');
-        btnPlayPause.classList.replace('hover:bg-lime-300', 'hover:bg-amber-300');
         requestPlaybackTick(playbackToken);
       }).catch(err => {
         console.warn("Play interrupted:", err);
@@ -2776,8 +2328,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       isPlaying = false;
       video.pause();
       playIcon.textContent = "▶ 播放";
-      btnPlayPause.classList.replace('bg-amber-400', 'bg-lime-400');
-      btnPlayPause.classList.replace('hover:bg-amber-300', 'hover:bg-lime-300');
       if (displayed && isPoseModelReady) {
         scrubSession=true; scrubPair=displayed; scrubFlight=null;
         const target=settleEnd ? Math.max(0,effectiveDuration-0.000001) : displayed.position;
@@ -2848,250 +2398,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     }
 
     /* ==========================================================================
-       8. 畫面標註功能 (直線、箭頭、圈選、文字備註、復原、重做、清除)
-       ========================================================================== */
-    function renderAnnotations(previewItem = null) {
-      if (!drawCanvas.width || !drawCanvas.height) return;
-      drawCtx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
-
-      const itemsToDraw = previewItem ? [...annotations, previewItem] : annotations;
-      for (const item of itemsToDraw) {
-        drawSingleAnnotation(drawCtx, item);
-      }
-    }
-
-    function drawSingleAnnotation(ctx, item) {
-      const p1 = mapVideoToCanvas(item.x1, item.y1, ctx.canvas);
-      const p2 = mapVideoToCanvas(item.x2, item.y2, ctx.canvas);
-
-      ctx.save();
-      ctx.strokeStyle = item.color || '#bef264';
-      ctx.fillStyle = item.color || '#bef264';
-      ctx.lineWidth = 3.5;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-
-      if (item.type === 'line') {
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.stroke();
-      } else if (item.type === 'arrow') {
-        // 箭頭主線
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.stroke();
-
-        // 箭頭頂點
-        const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-        const headLen = 16;
-        ctx.beginPath();
-        ctx.moveTo(p2.x, p2.y);
-        ctx.lineTo(p2.x - headLen * Math.cos(angle - Math.PI / 6), p2.y - headLen * Math.sin(angle - Math.PI / 6));
-        ctx.lineTo(p2.x - headLen * Math.cos(angle + Math.PI / 6), p2.y - headLen * Math.sin(angle + Math.PI / 6));
-        ctx.closePath();
-        ctx.fill();
-      } else if (item.type === 'circle') {
-        const radiusX = Math.abs(p2.x - p1.x);
-        const radiusY = Math.abs(p2.y - p1.y);
-        ctx.beginPath();
-        ctx.ellipse(p1.x, p1.y, Math.max(5, radiusX), Math.max(5, radiusY), 0, 0, Math.PI * 2);
-        ctx.stroke();
-      } else if (item.type === 'text') {
-        // 繪製文字標籤
-        ctx.font = 'bold 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-        const metrics = ctx.measureText(item.text);
-        const tw = metrics.width;
-        const th = 22;
-
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-        ctx.beginPath();
-        roundRect(ctx, p1.x - 6, p1.y - th / 2, tw + 14, th, 5);
-        ctx.fill();
-
-        ctx.strokeStyle = item.color || '#bef264';
-        ctx.lineWidth = 1.5;
-        ctx.stroke();
-
-        ctx.fillStyle = '#ffffff';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(item.text, p1.x + 1, p1.y + 1);
-      }
-
-      ctx.restore();
-    }
-
-    function pushAnnotationState(newAnnotations) {
-      undoStack.push([...annotations]);
-      redoStack = []; // 清空重做棧
-      annotations = newAnnotations;
-      updateUndoRedoButtons();
-      renderAnnotations();
-    }
-
-    function updateUndoRedoButtons() {
-      btnUndo.disabled = undoStack.length === 0;
-      btnRedo.disabled = redoStack.length === 0;
-    }
-
-    // 標註事件綁定
-    toolButtons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        pauseVideo(); // 進入標註自動暫停
-        const tool = btn.dataset.tool;
-
-        if (activeTool === tool) {
-          // 取消選取
-          activeTool = null;
-          btn.classList.remove('bg-lime-400', 'text-slate-950', 'font-bold');
-          btn.classList.add('bg-slate-800', 'text-slate-200');
-          drawCanvas.style.pointerEvents = 'none';
-          stageContainer.classList.remove('touch-draw-active');
-          annotationInstruction.textContent = "點選工具在畫面上標記";
-        } else {
-          toolButtons.forEach(b => {
-            b.classList.remove('bg-lime-400', 'text-slate-950', 'font-bold');
-            b.classList.add('bg-slate-800', 'text-slate-200');
-          });
-          activeTool = tool;
-          btn.classList.add('bg-lime-400', 'text-slate-950', 'font-bold');
-          btn.classList.remove('bg-slate-800', 'text-slate-200');
-          drawCanvas.style.pointerEvents = 'auto';
-          stageContainer.classList.add('touch-draw-active');
-          annotationInstruction.textContent = `${btn.textContent.trim()}：在畫面上拖曳或點選`;
-        }
-      });
-    });
-
-    colorSwatches.forEach(swatch => {
-      swatch.addEventListener('click', () => {
-        colorSwatches.forEach(s => s.classList.remove('ring-2', 'ring-white'));
-        swatch.classList.add('ring-2', 'ring-white');
-        activeColor = swatch.dataset.color;
-      });
-    });
-
-    // 畫布指標事件 (Pointer Events)
-    drawCanvas.addEventListener('pointerdown', (e) => {
-      if (!activeTool) return;
-      const rect = drawCanvas.getBoundingClientRect();
-      const screenX = (e.clientX - rect.left) * drawCanvas.width / rect.width;
-      const screenY = (e.clientY - rect.top) * drawCanvas.height / rect.height;
-
-      if (activeTool === 'text') {
-        // 開啟文字輸入浮動框
-        pendingTextPos = mapCanvasToVideo(screenX, screenY);
-        textInputModal.style.left = `${Math.min(rect.width - 200, Math.max(10, e.clientX - rect.left))}px`;
-        textInputModal.style.top = `${Math.min(rect.height - 60, Math.max(10, e.clientY - rect.top - 40))}px`;
-        textInputModal.classList.remove('hidden');
-        textInputContent.value = '';
-        textInputContent.focus();
-        return;
-      }
-
-      isDrawing = true;
-      drawStartPoint = { screenX, screenY, norm: mapCanvasToVideo(screenX, screenY) };
-      drawCanvas.setPointerCapture(e.pointerId);
-    });
-
-    drawCanvas.addEventListener('pointermove', (e) => {
-      if (!isDrawing || !drawStartPoint) return;
-      const rect = drawCanvas.getBoundingClientRect();
-      const screenX = (e.clientX - rect.left) * drawCanvas.width / rect.width;
-      const screenY = (e.clientY - rect.top) * drawCanvas.height / rect.height;
-      const currentNorm = mapCanvasToVideo(screenX, screenY);
-
-      const previewItem = {
-        type: activeTool,
-        x1: drawStartPoint.norm.x,
-        y1: drawStartPoint.norm.y,
-        x2: currentNorm.x,
-        y2: currentNorm.y,
-        color: activeColor
-      };
-      renderAnnotations(previewItem);
-    });
-
-    drawCanvas.addEventListener('pointerup', (e) => {
-      if (!isDrawing || !drawStartPoint) return;
-      isDrawing = false;
-      const rect = drawCanvas.getBoundingClientRect();
-      const screenX = (e.clientX - rect.left) * drawCanvas.width / rect.width;
-      const screenY = (e.clientY - rect.top) * drawCanvas.height / rect.height;
-      const currentNorm = mapCanvasToVideo(screenX, screenY);
-
-      // 若拖曳距離過小則略過
-      const dist = Math.hypot(screenX - drawStartPoint.screenX, screenY - drawStartPoint.screenY);
-      if (dist > 8) {
-        const newItem = {
-          type: activeTool,
-          x1: drawStartPoint.norm.x,
-          y1: drawStartPoint.norm.y,
-          x2: currentNorm.x,
-          y2: currentNorm.y,
-          color: activeColor
-        };
-        pushAnnotationState([...annotations, newItem]);
-      } else {
-        renderAnnotations();
-      }
-      drawStartPoint = null;
-    });
-
-    // 文字輸入對話處理
-    btnConfirmText.addEventListener('click', () => {
-      const text = textInputContent.value.trim();
-      if (text && pendingTextPos) {
-        const newItem = {
-          type: 'text',
-          x1: pendingTextPos.x,
-          y1: pendingTextPos.y,
-          x2: pendingTextPos.x,
-          y2: pendingTextPos.y,
-          color: activeColor,
-          text
-        };
-        pushAnnotationState([...annotations, newItem]);
-      }
-      textInputModal.classList.add('hidden');
-      pendingTextPos = null;
-    });
-
-    textInputContent.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') btnConfirmText.click();
-      if (e.key === 'Escape') textInputModal.classList.add('hidden');
-    });
-
-    btnCancelText.addEventListener('click', () => {
-      textInputModal.classList.add('hidden');
-      pendingTextPos = null;
-    });
-
-    // 復原 / 重做 / 清除
-    btnUndo.addEventListener('click', () => {
-      if (undoStack.length === 0) return;
-      redoStack.push([...annotations]);
-      annotations = undoStack.pop();
-      updateUndoRedoButtons();
-      renderAnnotations();
-    });
-
-    btnRedo.addEventListener('click', () => {
-      if (redoStack.length === 0) return;
-      undoStack.push([...annotations]);
-      annotations = redoStack.pop();
-      updateUndoRedoButtons();
-      renderAnnotations();
-    });
-
-    btnClearAnnotations.addEventListener('click', () => {
-      if (annotations.length === 0) return;
-      pushAnnotationState([]);
-    });
-
-    /* ==========================================================================
-       9. 輸出功能：PNG 截圖與骨架影片匯出 (嚴格 MIME 與副檔名對應)
+       8. 產出結果：結果圖、骨架影片與給 AI 的文字摘要
        ========================================================================== */
     btnShareApp.addEventListener('click', async () => {
       const shareData = {
@@ -3104,7 +2411,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         else {
           await navigator.clipboard.writeText(`${shareData.text}\n${shareData.url}`);
           btnShareApp.textContent = '連結已複製';
-          setTimeout(() => { btnShareApp.textContent = '分享工具'; }, 1800);
+          setTimeout(() => { btnShareApp.textContent = '分享給其他家長'; }, 1800);
         }
       } catch (err) {
         if (err && err.name !== 'AbortError') alert(`無法開啟分享功能，請複製網址：${shareData.url}`);
@@ -3207,16 +2514,16 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         `## 建議一起提供\n\n- 前腳落地前一格、落地格、出手格的 PNG\n- 原始影片或 PitchFrame 匯出的骨架影片\n- 投手慣用手、年齡層、這次是平地或投手丘\n- 當天是否疼痛或明顯疲勞（若有，先停止投球並尋求專業評估）\n`;
     }
 
-    btnExportAI.addEventListener('click', () => {
-      if (!video.videoWidth) { alert('請先載入並分析一段投球影片。'); return; }
-      const blob = new Blob([aiAnalysisPackage()], { type: 'text/markdown;charset=utf-8' });
+    function downloadBlob(blob, fileName) {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `PitchFrame_教練AI分析包_${new Date().toISOString().slice(0, 10)}.md`;
+      link.download = fileName;
+      document.body.appendChild(link);
       link.click();
+      link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-    });
+    }
 
     btnShareAI.addEventListener('click', async () => {
       if (!video.videoWidth) { alert('請先載入並分析一段投球影片。'); return; }
@@ -3229,106 +2536,119 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         const file = new File([content], fileName, { type: 'text/markdown;charset=utf-8' });
         if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
           await navigator.share({ title: 'PitchFrame 教練／AI 分析包', text: '內含教練快速摘要、資料品質與限制；請查看關鍵畫面後再提供建議。', files: [file] });
-          aiHandoffStatus.textContent = '已開啟分享選單；實際接收對象由你決定。';
+          aiHandoffStatus.textContent = '已開啟分享選單，傳給誰由你決定。';
         } else if (navigator.clipboard && window.isSecureContext) {
           await navigator.clipboard.writeText(content);
-          aiHandoffStatus.textContent = '分析內容已複製，可直接貼到 AI 對話或傳給教練。';
+          aiHandoffStatus.textContent = '文字摘要已複製，可直接貼到 AI 對話。';
         } else {
-          throw new Error('此瀏覽器不支援檔案分享或剪貼簿');
+          downloadBlob(new Blob([content], { type: 'text/markdown;charset=utf-8' }), fileName);
+          aiHandoffStatus.textContent = '文字摘要已下載。';
         }
       } catch (err) {
-        if (err && err.name === 'AbortError') aiHandoffStatus.textContent = '已取消分享，資料沒有傳出。';
+        if (err && err.name === 'AbortError') aiHandoffStatus.textContent = '已取消，資料沒有傳出。';
         else {
-          aiHandoffStatus.textContent = '無法直接分享，請改用「下載教練／AI 分析包」。';
-          alert('此瀏覽器無法直接分享或複製，請改用「下載教練／AI 分析包」。');
+          downloadBlob(new Blob([content], { type: 'text/markdown;charset=utf-8' }), fileName);
+          aiHandoffStatus.textContent = '無法直接分享，已改為下載文字摘要。';
         }
       } finally {
         btnShareAI.disabled = false;
-        btnShareAIText.textContent = '分享分析給教練／AI';
+        btnShareAIText.textContent = '給 AI 的文字摘要';
       }
     });
 
-    // 輸出目前影格 PNG
-    btnExportPNG.addEventListener('click', () => {
-      if (pairedPlaybackActive() && playPair) {
-        pauseVideo();
-        alert('已停在畫面所示影格；請等骨架同步後再匯出 PNG。');
-        return;
+    /* 結果圖：前腳落地與出手兩格並排，畫上骨架與角度，一張圖就能傳給教練。
+       用隱藏的分析用影片解碼關鍵格，不打斷主畫面。沒有骨架的格子只畫原畫面，不捏造。 */
+    async function decodeAnalysisFrame(time) {
+      if (analysisVideo.getAttribute('src') !== currentVideoObjectUrl) {
+        const loaded = waitForMediaEvent(analysisVideo, 'loadeddata', 20000, '影片載入逾時');
+        analysisVideo.src = currentVideoObjectUrl;
+        analysisVideo.load();
+        await loaded;
       }
-      if (scrubSession) { alert('拖曳辨識尚在同步，請放開進度條並等目標影格完成後再匯出。'); return; }
-      if (!video.videoWidth || !video.videoHeight) {
-        alert("請先載入球員影片！");
-        return;
+      if (Math.abs(analysisVideo.currentTime - time) > 0.000001 || analysisVideo.readyState < 2) await seekAnalysisVideo(time);
+    }
+    async function renderKeyPanel(key, width, height) {
+      const panel = document.createElement('canvas');
+      panel.width = width; panel.height = height;
+      const ctx = panel.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, width, height);
+      await decodeAnalysisFrame(sepKeyTime(key));
+      const b = getRenderBounds(panel);
+      ctx.drawImage(analysisVideo, b.destX, b.destY, b.destW, b.destH);
+      const lm = poseCache.get(key);
+      if (showSkeleton && lm && lm.length >= 25) {
+        // 骨架畫在較小的透明圖層再放大，線條與角度字在手機上看得清楚，影片本身保持原解析度
+        const k = 0.55, layer = document.createElement('canvas');
+        layer.width = Math.round(width * k); layer.height = Math.round(height * k);
+        const savedBox = smoothedCalloutBox;
+        smoothedCalloutBox = null;
+        drawSimplifiedBaseballSkeleton(layer.getContext('2d'), lm, false);
+        smoothedCalloutBox = savedBox;
+        ctx.drawImage(layer, 0, 0, width, height);
       }
-      pauseVideo(false,false);
-
-      if (video.seeking || video.readyState < 2) {
-        alert('影片仍在跳轉，請等畫面穩定後再匯出。'); return;
+      return panel;
+    }
+    async function buildResultImage() {
+      const sep = getSeparation();
+      const items = [];
+      if (sep && sep.foot !== null) items.push({ key: sep.foot, name: '前腳落地', manual: sep.manualFoot });
+      if (sep && sep.release !== null) items.push({ key: sep.release, name: '出手', manual: sep.manualRelease });
+      if (!items.length) items.push({ key: currentManualEventKey(), name: '目前畫面', manual: null });
+      const aspect = (video.videoWidth || 16) / (video.videoHeight || 9);
+      const sideBySide = aspect < 1.1 && items.length > 1;
+      const pad = 28, labelH = 64, footH = 72;
+      const pw = sideBySide ? Math.round(900 * aspect) : 1000;
+      const ph = sideBySide ? 900 : Math.round(1000 / aspect);
+      const cols = sideBySide ? items.length : 1, rows = sideBySide ? 1 : items.length;
+      const card = document.createElement('canvas');
+      card.width = pad + cols * (pw + pad);
+      card.height = pad + rows * (labelH + ph + pad) + footH - pad;
+      const ctx = card.getContext('2d');
+      ctx.fillStyle = '#0b131c'; ctx.fillRect(0, 0, card.width, card.height);
+      const font = (size, weight = 700) => `${weight} ${size}px -apple-system, BlinkMacSystemFont, "Noto Sans TC", sans-serif`;
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const x = pad + (sideBySide ? i * (pw + pad) : 0);
+        const y = pad + (sideBySide ? 0 : i * (labelH + ph + pad));
+        ctx.fillStyle = '#bef264'; ctx.font = font(34, 800); ctx.textBaseline = 'middle';
+        ctx.fillText(item.name, x, y + labelH / 2 - 4);
+        const nameW = ctx.measureText(item.name).width;
+        ctx.fillStyle = '#9fb3c2'; ctx.font = font(24, 500);
+        ctx.fillText(`${sepKeyTime(item.key).toFixed(2)} 秒${item.manual === null ? '' : item.manual ? '・已確認' : '・AI 估計'}`, x + nameW + 16, y + labelH / 2 - 4);
+        ctx.drawImage(await renderKeyPanel(item.key, pw, ph), x, y + labelH);
       }
-      if (showSkeleton && !poseMatchesFrame()) {
-        alert('目前影格的骨架尚未完成。這次 PNG 只匯出原影片與手動畫記，不含骨架；若需要骨架請稍候再按匯出。');
-      }
-      // 建立高解析度畫布
-      const exportCanvas = document.createElement('canvas');
-      exportCanvas.width = video.videoWidth;
-      exportCanvas.height = video.videoHeight;
-      const expCtx = exportCanvas.getContext('2d');
-
-      // 1. 繪製影片原畫面
-      expCtx.drawImage(video, 0, 0, exportCanvas.width, exportCanvas.height);
-
-      // 2. 暫時將坐標對齊全畫面並繪製骨架
-
-      if (showSkeleton && poseMatchesFrame() && currentLandmarks && currentLandmarks.length >= 25) {
-        drawSimplifiedBaseballSkeleton(expCtx, currentLandmarks, isCurrentLandmarkEstimated);
-      }
-
-      // 3. 繪製標註
-      for (const item of annotations) {
-        const p1 = { x: item.x1 * exportCanvas.width, y: item.y1 * exportCanvas.height };
-        const p2 = { x: item.x2 * exportCanvas.width, y: item.y2 * exportCanvas.height };
-        expCtx.save();
-        expCtx.strokeStyle = item.color || '#bef264';
-        expCtx.fillStyle = item.color || '#bef264';
-        expCtx.lineWidth = 4;
-        expCtx.lineCap = 'round';
-        expCtx.lineJoin = 'round';
-        if (item.type === 'line') {
-          expCtx.beginPath(); expCtx.moveTo(p1.x, p1.y); expCtx.lineTo(p2.x, p2.y); expCtx.stroke();
-        } else if (item.type === 'arrow') {
-          expCtx.beginPath(); expCtx.moveTo(p1.x, p1.y); expCtx.lineTo(p2.x, p2.y); expCtx.stroke();
-          const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-          const headLen = 20;
-          expCtx.beginPath();
-          expCtx.moveTo(p2.x, p2.y);
-          expCtx.lineTo(p2.x - headLen * Math.cos(angle - Math.PI / 6), p2.y - headLen * Math.sin(angle - Math.PI / 6));
-          expCtx.lineTo(p2.x - headLen * Math.cos(angle + Math.PI / 6), p2.y - headLen * Math.sin(angle + Math.PI / 6));
-          expCtx.closePath(); expCtx.fill();
-        } else if (item.type === 'circle') {
-          expCtx.beginPath();
-          expCtx.ellipse(p1.x, p1.y, Math.abs(p2.x - p1.x), Math.abs(p2.y - p1.y), 0, 0, Math.PI * 2);
-          expCtx.stroke();
-        } else if (item.type === 'text') {
-          expCtx.font = 'bold 16px -apple-system, sans-serif';
-          const tw = expCtx.measureText(item.text).width;
-          expCtx.fillStyle = 'rgba(15, 23, 42, 0.9)';
-          roundRect(expCtx, p1.x - 8, p1.y - 14, tw + 16, 28, 6);
-          expCtx.fill();
-          expCtx.strokeStyle = item.color || '#bef264';
-          expCtx.stroke();
-          expCtx.fillStyle = '#ffffff';
-          expCtx.fillText(item.text, p1.x, p1.y + 5);
+      ctx.fillStyle = '#9fb3c2'; ctx.font = font(24, 500); ctx.textBaseline = 'middle';
+      ctx.fillText('PitchFrame・影片只在手機上分析，沒有上傳', pad, card.height - footH / 2);
+      ctx.fillStyle = '#6f8596'; ctx.font = font(20, 500); ctx.textAlign = 'right';
+      ctx.fillText('bddgtw-tw.github.io/pitchframe-baseball-lab', card.width - pad, card.height - footH / 2);
+      ctx.textAlign = 'left';
+      return new Promise((resolve, reject) => card.toBlob(blob => blob ? resolve(blob) : reject(new Error('無法產生圖片')), 'image/png'));
+    }
+    btnShareResult.addEventListener('click', async () => {
+      if (!video.videoWidth || !currentVideoObjectUrl) return;
+      if (analysisActive() || isExportingVideo) { aiHandoffStatus.textContent = '分析完成後再分享。'; return; }
+      if (isPlaying) pauseVideo(false, false);
+      btnShareResult.disabled = true;
+      btnShareResultText.textContent = '製作結果圖…';
+      aiHandoffStatus.textContent = '';
+      const fileName = `PitchFrame_投球結果_${new Date().toISOString().slice(0, 10)}.png`;
+      try {
+        const blob = await buildResultImage();
+        const file = new File([blob], fileName, { type: 'image/png' });
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: '投球結果', text: '前腳落地與出手（PitchFrame）' });
+          aiHandoffStatus.textContent = '已開啟分享選單，傳給誰由你決定。';
+        } else {
+          downloadBlob(blob, fileName);
+          aiHandoffStatus.textContent = '結果圖已下載。';
         }
-        expCtx.restore();
+      } catch (err) {
+        if (err && err.name === 'AbortError') aiHandoffStatus.textContent = '已取消，圖片沒有傳出。';
+        else { console.error('Result image failed:', err); aiHandoffStatus.textContent = `結果圖製作失敗：${err?.message || err}`; }
+      } finally {
+        btnShareResult.disabled = false;
+        btnShareResultText.textContent = '分享結果圖給教練';
       }
-
-
-      // 觸發下載
-      const link = document.createElement('a');
-      const curFrame = Math.round(video.currentTime * 30);
-      link.download = `少棒動作觀察_${video.currentTime.toFixed(1)}s_格${curFrame}.png`;
-      link.href = exportCanvas.toDataURL('image/png');
-      link.click();
     });
 
     // 統一匯出清理：涵蓋 recorder、所有 stream tracks、RAF / video-frame callback、事件監聽與 UI 狀態
@@ -3602,11 +2922,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `少棒骨架動作分析_${Date.now()}.${finalExt}`;
+          a.download = `PitchFrame_骨架影片_${new Date().toISOString().slice(0, 10)}.${finalExt}`;
           document.body.appendChild(a);
           a.click();
           document.body.removeChild(a);
-          URL.revokeObjectURL(url);
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
         };
 
         const drawFrameByTime = (mediaTime) => {
@@ -3620,10 +2940,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
           if (showSkeleton && entry && entry.analyzed && entry.landmarks && entry.landmarks.length >= 25) {
             drawSimplifiedBaseballSkeleton(expCtx, entry.landmarks, false);
-          }
-
-          for (const item of annotations) {
-            drawSingleAnnotation(expCtx, item);
           }
 
           const progress = Math.min(100, Math.round((mediaTime / effectiveDuration) * 100));
@@ -3647,6 +2963,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           }
           return false;
         };
+        // 最後一格之後不會再有影格回呼；影片播完時也要停止錄製，否則進度停在 100% 不會下載
+        const stopOnEnd = () => { if (isExportingVideo && !exportCancelled) stopRecordingIfDone(); };
+        video.addEventListener('ended', stopOnEnd, { signal });
+        video.addEventListener('timeupdate', stopOnEnd, { signal });
 
         if (typeof video.requestVideoFrameCallback === 'function') {
           const onVideoFrame = (_now, metadata) => {
@@ -3704,11 +3024,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       e.stopPropagation();
       fileInput.click();
     });
-    emptyPrompt.addEventListener('click', (e) => {
-      // 避免點擊 prompt 內部按鈕時重複觸發
-      if (e.target.closest('button')) return;
-      fileInput.click();
-    });
     fileInput.addEventListener('change', (e) => {
       if (e.target.files && e.target.files[0]) {
         handleVideoFile(e.target.files[0]);
@@ -3742,7 +3057,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         if (delayTimer !== null) clearTimeout(delayTimer);
         if (repeatTimer !== null) clearInterval(repeatTimer);
         delayTimer = null; repeatTimer = null;
-        btn.classList.remove('ring-2', 'ring-lime-400');
+        btn.classList.remove('hold-active');
       };
       btn.addEventListener('pointerdown', (e) => {
         if (e.pointerType === 'mouse' && e.button !== 0) return;
@@ -3752,7 +3067,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         stepFrame(delta);
         delayTimer = setTimeout(() => {
           delayTimer = null;
-          btn.classList.add('ring-2', 'ring-lime-400');
+          btn.classList.add('hold-active');
           repeatTimer = setInterval(() => {
             if (!video.seeking && timelineSeekTarget === null) stepFrame(delta);
           }, HOLD_STEP_INTERVAL);
@@ -3768,14 +3083,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     bindHoldStep(btnPrev1, -1);
     bindHoldStep(btnNext1, 1);
     window.addEventListener('blur', () => [btnPrev1, btnNext1].forEach(b => b.dispatchEvent(new Event('pointercancel'))));
-
-    // 循環開關
-    btnLoop.addEventListener('click', () => {
-      isLooping = !isLooping;
-      loopStatusText.textContent = `循環: ${isLooping ? '開' : '關'}`;
-      btnLoop.classList.toggle('text-lime-300', isLooping);
-      btnLoop.classList.toggle('text-slate-400', !isLooping);
-    });
 
     // Native range owns the thumb during interaction. Capture its value BEFORE
     // pauseVideo(), which renders and otherwise overwrites it with the old time.
@@ -3799,8 +3106,6 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       endScrubSession();
       isPlaying = false; ++playbackGeneration; video.pause();
       playIcon.textContent = '▶ 播放';
-      btnPlayPause.classList.replace('bg-amber-400', 'bg-lime-400');
-      btnPlayPause.classList.replace('hover:bg-amber-300', 'hover:bg-lime-300');
       timelineSeekTarget = target;
       invalidatePosePresentation();
       video.currentTime = target;
@@ -3825,43 +3130,19 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     window.addEventListener('pointerup', finishTimelineDrag);
     window.addEventListener('pointercancel', finishTimelineDrag);
 
-    // 速度選擇
-    speedButtons.forEach(btn => {
-      btn.addEventListener('click', () => {
-        speedButtons.forEach(b => {
-          b.classList.remove('bg-lime-400', 'text-slate-950', 'font-bold');
-          b.classList.add('text-slate-400');
-        });
-        btn.classList.add('bg-lime-400', 'text-slate-950', 'font-bold');
-        btn.classList.remove('text-slate-400');
-        currentSpeed = parseFloat(btn.dataset.speed);
-        video.playbackRate = currentSpeed;
-      });
+    // 慢動作：一顆開關，1× ↔ 0.25×
+    btnSlow.addEventListener('click', () => {
+      currentSpeed = currentSpeed === 1 ? 0.25 : 1;
+      video.playbackRate = currentSpeed;
+      btnSlow.setAttribute('aria-pressed', String(currentSpeed !== 1));
     });
 
-    // 骨架顯示開關
-    btnToggleSkeleton.addEventListener('click', () => {
+    // 點影片畫面：顯示／隱藏骨架
+    stageContainer.addEventListener('click', () => {
+      if (document.body.dataset.step !== 'result' || !pickOverlay.classList.contains('hidden')) return;
       clearPlaybackPair();
       showSkeleton = !showSkeleton;
       if (showSkeleton && isPlaying) seedPlaybackPair();
-      skeletonToggleText.textContent = showSkeleton ? "隱藏骨架" : "顯示骨架";
-      btnToggleSkeleton.classList.toggle('bg-lime-400/20', showSkeleton);
-      btnToggleSkeleton.classList.toggle('text-lime-300', showSkeleton);
-      btnToggleSkeleton.classList.toggle('border-lime-400/30', showSkeleton);
-      btnToggleSkeleton.classList.toggle('bg-slate-800', !showSkeleton);
-      btnToggleSkeleton.classList.toggle('text-slate-400', !showSkeleton);
-      renderStage();
-    });
-
-    // 角度標記顯示開關（可獨立關閉畫面上的角度膠囊與引線）
-    btnToggleAngles.addEventListener('click', () => {
-      showAngleBadges = !showAngleBadges;
-      anglesToggleText.textContent = showAngleBadges ? "隱藏角度" : "顯示角度";
-      btnToggleAngles.classList.toggle('bg-lime-400/20', showAngleBadges);
-      btnToggleAngles.classList.toggle('text-lime-300', showAngleBadges);
-      btnToggleAngles.classList.toggle('border-lime-400/30', showAngleBadges);
-      btnToggleAngles.classList.toggle('bg-slate-800', !showAngleBadges);
-      btnToggleAngles.classList.toggle('text-slate-400', !showAngleBadges);
       renderStage();
     });
 

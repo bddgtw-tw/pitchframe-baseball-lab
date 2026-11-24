@@ -23,17 +23,13 @@
 
 - JavaScript 無語法錯誤，console 沒有新增錯誤。
 - 手機直式、手機橫式與桌面版仍可操作。
-- 選片、選人、逐格、手動落地點與匯出流程沒有退化。
+- 選片、選人、逐格、手動標記落地／出手、分享結果圖與骨架影片沒有退化。
 - Service Worker 版本已更新，公開站能取得新版資源。
 - PR 說明列出驗證環境與實際結果。
 
-## 更新介面 CSS
+## 介面原則
 
-公開站使用預先編譯的 `pitchframe.css`，不要把 Tailwind 瀏覽器端編譯器加回主畫面。修改 HTML class 後執行：
-
-```bash
-npx --yes tailwindcss@3.4.17 -i tailwind.source.css -o pitchframe.css --minify --content index.html
-```
+主流程只有三步：拍攝 → 分析 → 結果。新增任何按鈕或面板前，先回答「它有沒有幫家長更快、更準地看懂這一球」；答不出來就不要加。樣式直接寫在 `index.html` 的 `<style>`，不需要建置步驟。
 
 提交前確認首次開啟不會下載 Pose 模型；模型應等到使用者選擇影片後才載入。
 
