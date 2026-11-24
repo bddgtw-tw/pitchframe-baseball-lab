@@ -245,7 +245,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     @media (min-width: 640px) {
       #exportActions { display: flex; }
       #parentGuide ol { grid-template-columns: repeat(3,minmax(0,1fr)); }
-      #contextFields { grid-template-columns: repeat(5,minmax(0,1fr)); }
+      #contextFields { grid-template-columns: repeat(6,minmax(0,1fr)); }
       #telemetryGrid { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 16px; }
       #telemetryGrid > div { flex-direction: column; align-items: stretch; gap: 10px; }
     }
@@ -374,6 +374,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         <span id="contextSaved" class="hidden shrink-0 text-[11px] font-bold text-lime-300">已儲存</span>
       </div>
       <div id="contextFields">
+        <label>匿名球員
+          <select id="ctxAthleteSlot">
+            <option value="A">球員 A</option>
+            <option value="B">球員 B</option>
+            <option value="C">球員 C</option>
+          </select>
+        </label>
         <label>投球手
           <select id="ctxHandedness">
             <option value="unknown">尚未設定</option>
@@ -877,6 +884,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     let videoDuration = 0;
     let effectiveDuration = 0;
     const contextControls = {
+      athleteSlot: document.getElementById('ctxAthleteSlot'),
       handedness: document.getElementById('ctxHandedness'),
       ageGroup: document.getElementById('ctxAgeGroup'),
       cameraView: document.getElementById('ctxCameraView'),
@@ -885,7 +893,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     };
     const contextSaved = document.getElementById('contextSaved');
     const conditionWarning = document.getElementById('conditionWarning');
-    let analysisContext = { handedness: 'unknown', ageGroup: 'unknown', cameraView: 'unknown', surface: 'unknown', condition: 'unknown' };
+    let analysisContext = { athleteSlot: 'A', handedness: 'unknown', ageGroup: 'unknown', cameraView: 'unknown', surface: 'unknown', condition: 'unknown' };
     try {
       const saved = JSON.parse(localStorage.getItem('pf-analysis-context') || 'null');
       if (saved && typeof saved === 'object') analysisContext = { ...analysisContext, ...saved };
@@ -3491,10 +3499,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         rightKneeDegrees: calculateAngle(lm[24], lm[26], lm[28])
       };
     }
-    function currentSessionSnapshot() {
-      const sep = getSeparation();
+    function currentSessionSnapshot(separation = getSeparation()) {
+      const sep = separation;
       if (!sep || (sep.foot === null && sep.release === null)) return null;
       const eventTime = key => key === null || key === undefined ? null : Number(sepKeyTime(key).toFixed(3));
+      const footTime = eventTime(sep.foot), releaseTime = eventTime(sep.release);
+      const phaseMs = footTime !== null && releaseTime !== null && releaseTime >= footTime
+        ? Math.round((releaseTime - footTime) * 1000) : null;
       return {
         schema: 'pitchframe-progress-v1',
         savedAt: new Date().toISOString(),
@@ -3507,10 +3518,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           variableFrameRate: sourceFrameIndex ? !!sourceFrameIndex.variableFrameRate : null
         },
         events: {
-          footStrikeSeconds: eventTime(sep.foot),
+          footStrikeSeconds: footTime,
           footStrikeSource: sep.foot === null ? null : sep.manualFoot ? 'manual' : 'automatic-estimate',
-          ballReleaseSeconds: eventTime(sep.release),
+          ballReleaseSeconds: releaseTime,
           ballReleaseSource: sep.release === null ? null : sep.manualRelease ? 'manual' : 'automatic-estimate',
+          footStrikeToReleaseMilliseconds: phaseMs,
           separationTrendLevel: sep.footLevel === null ? null : Number(sep.footLevel.toFixed(3))
         },
         footStrikeMetrics: frameMetricsAtKey(sep.foot),
@@ -3527,7 +3539,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         const row = document.createElement('div'); row.className = 'progress-item';
         const date = document.createElement('span'); date.textContent = new Date(item.savedAt).toLocaleString('zh-TW');
         const detail = document.createElement('span');
-        detail.textContent = `${item.context.handedness === 'right' ? '右投' : item.context.handedness === 'left' ? '左投' : '手別未設'}・${item.context.cameraView || '視角未設'}・落地 ${item.events.footStrikeSeconds ?? '--'}s・出手 ${item.events.ballReleaseSeconds ?? '--'}s`;
+        detail.textContent = `球員 ${item.context.athleteSlot || 'A'}・${item.context.handedness === 'right' ? '右投' : item.context.handedness === 'left' ? '左投' : '手別未設'}・${item.context.cameraView || '視角未設'}・落地→出手 ${item.events.footStrikeToReleaseMilliseconds ?? '--'}ms`;
         row.append(date, detail); list.appendChild(row);
       });
     }
@@ -3549,6 +3561,18 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     function aiAnalysisPackage() {
       const sep = getSeparation();
+      const currentComparison = currentSessionSnapshot(sep);
+      const baseline = progressHistory.length ? progressHistory.find(item => (item.context.athleteSlot || 'A') === analysisContext.athleteSlot) || null : null;
+      const sameContext = !!(baseline && currentComparison
+        && (baseline.context.athleteSlot || 'A') === analysisContext.athleteSlot
+        && baseline.context.handedness === analysisContext.handedness
+        && baseline.context.cameraView !== 'unknown'
+        && baseline.context.cameraView === analysisContext.cameraView
+        && baseline.context.surface === analysisContext.surface);
+      const currentPhase = currentComparison?.events?.footStrikeToReleaseMilliseconds;
+      const baselinePhase = baseline?.events?.footStrikeToReleaseMilliseconds;
+      const phaseDelta = sameContext && Number.isFinite(currentPhase) && Number.isFinite(baselinePhase)
+        ? currentPhase - baselinePhase : null;
       const eventTime = key => key === null || key === undefined ? null : Number(sepKeyTime(key).toFixed(3));
       const separationObservation = !sep || sep.foot === null ? '未確認前腳落地事件'
         : sep.footLevel === null ? '落地附近資料不足，不判讀'
@@ -3569,6 +3593,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           } : null
         },
         athleteContext: {
+          anonymousAthleteSlot: analysisContext.athleteSlot,
           throwingHand: analysisContext.handedness,
           ageGroup: analysisContext.ageGroup,
           cameraView: analysisContext.cameraView,
@@ -3600,13 +3625,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           ballRelease: sep ? frameMetricsAtKey(sep.release) : null
         },
         comparison: {
-          baseline: progressHistory.length ? progressHistory[0] : null,
-          validOnlyWhen: 'throwingHand, cameraView, throwingSurface, and recording setup are comparable; otherwise describe differences without claiming improvement',
-          sameContext: progressHistory.length > 0
-            && progressHistory[0].context.handedness === analysisContext.handedness
-            && progressHistory[0].context.cameraView !== 'unknown'
-            && progressHistory[0].context.cameraView === analysisContext.cameraView
-            && progressHistory[0].context.surface === analysisContext.surface
+          current: currentComparison,
+          baseline,
+          footStrikeToReleaseDeltaMilliseconds: phaseDelta,
+          validOnlyWhen: 'anonymousAthleteSlot, throwingHand, cameraView, throwingSurface, frame rate, and recording setup are comparable; otherwise describe differences without claiming improvement',
+          sameContext
         },
         limitations: [
           '單一相機與 MediaPipe 姿態估計不能取代 3D 動作捕捉、測力板或醫療評估。',
