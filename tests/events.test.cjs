@@ -45,4 +45,20 @@ assert.equal(stillResult.foot, null);
 assert.equal(stillResult.release, null);
 assert.equal(stillResult.reason, 'insufficient-stride-motion');
 
-console.log('PitchFrame event tests passed: right throw, left throw, explicit-hand override, and insufficient motion.');
+// Whole-video analysis samples a sparse set of source-frame keys. Detection must return the
+// original source key while its temporal search window uses the sampling rate, not source FPS.
+const sparseKeys = rightStride.map((_, index) => index * 4);
+const sparseMap = new Map();
+sparseKeys.forEach((key, index) => {
+  const landmarks = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 1 }));
+  landmarks[27].x = rightStride[index];
+  landmarks[28].x = 0.75;
+  landmarks[16].x = rightWrist[index];
+  sparseMap.set(key, landmarks);
+});
+const sparseResult = detectPitchEvents({ keys: sparseKeys, poseByKey: sparseMap, width: 1000, height: 700, fps: 8, handedness: 'right' });
+assert.equal(sparseResult.foot, 28, 'sampled foot strike maps back to source-frame key');
+assert.equal(sparseResult.release, 40, 'sampled release maps back to source-frame key');
+assert.equal(sparseResult.reason, 'ok');
+
+console.log('PitchFrame event tests passed: right throw, left throw, sparse sampling, explicit-hand override, and insufficient motion.');

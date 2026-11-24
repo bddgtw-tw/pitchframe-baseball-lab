@@ -43,6 +43,9 @@ for (const sharingBehavior of ['免費免登入：用手機逐格確認前腳落
 for (const performanceBehavior of ['href="./pitchframe.css"', '選擇影片後才載入本站 AI 模型', 'if (!isPoseModelReady && !poseInitPromise) initMediaPipe()']) {
   if (!html.includes(performanceBehavior)) fail(`Deferred-loading behavior is missing: ${performanceBehavior}`);
 }
+for (const samplingBehavior of ['const ANALYSIS_SAMPLE_FPS = 8', 'sampledKeys: frames.map(frame => frame.index)', '個取樣點', 'fps: ANALYSIS_SAMPLE_FPS']) {
+  if (!html.includes(samplingBehavior)) fail(`Bounded whole-video sampling is missing: ${samplingBehavior}`);
+}
 for (const blockingBehavior of ['src="./tailwind.js"', "addEventListener('DOMContentLoaded', initMediaPipe)", 'user-scalable=no']) {
   if (html.includes(blockingBehavior)) fail(`Blocking or inaccessible startup behavior remains: ${blockingBehavior}`);
 }
@@ -62,6 +65,10 @@ if (analysisSchema.properties?.estimatedEvents?.properties?.separationSignal?.pr
 if (analysisExample.schema !== analysisSchema.properties.schema.const) fail('AI package example and schema versions do not match.');
 if (analysisExample.estimatedEvents?.separationSignal?.validatedPhysicalMeasurement !== false) {
   fail('AI package example must preserve the physical-measurement safeguard.');
+}
+if (analysisSchema.properties?.analysisReadiness?.properties?.poseCoverage?.properties?.samplingRateFps?.const !== 8
+    || analysisExample.analysisReadiness?.poseCoverage?.samplingRateFps !== 8) {
+  fail('AI package schema and example must disclose the whole-video sampling rate.');
 }
 for (const pilotGate of ['5 分鐘內完成', '至少收集 3 位家長與 2 位教練', '可以刪除或收起']) {
   if (!pilot.includes(pilotGate)) fail(`Parent/coach validation gate is missing: ${pilotGate}`);

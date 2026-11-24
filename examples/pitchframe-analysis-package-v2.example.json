@@ -26,9 +26,18 @@
     "missingFields": [],
     "normalConditionForComparison": true,
     "poseCoverage": {
+      "analysisComplete": true,
+      "totalFrames": 41,
+      "totalSampledFrames": 41,
+      "analyzedFrames": 41,
+      "detectedFrames": 39,
+      "detectedRatio": 0.9512,
+      "samplingRateFps": 8,
+      "operationalThreshold": 0.8,
+      "eventsConfirmed": true,
+      "criticalFramesDetected": true,
       "readyForAutomatedSummary": true,
-      "coverageRatio": 0.91,
-      "criticalFramesDetected": true
+      "thresholdNote": "80% 是 PitchFrame 的保守操作門檻，不是經臨床或生物力學研究驗證的準確度標準。"
     }
   },
   "captureQuality": {

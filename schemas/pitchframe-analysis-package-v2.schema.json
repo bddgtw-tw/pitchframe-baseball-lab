@@ -58,9 +58,20 @@
         "normalConditionForComparison": { "type": "boolean" },
         "poseCoverage": {
           "type": "object",
-          "required": ["readyForAutomatedSummary"],
+          "required": ["analysisComplete", "totalSampledFrames", "analyzedFrames", "detectedFrames", "detectedRatio", "samplingRateFps", "operationalThreshold", "eventsConfirmed", "criticalFramesDetected", "readyForAutomatedSummary", "thresholdNote"],
           "properties": {
-            "readyForAutomatedSummary": { "type": "boolean" }
+            "analysisComplete": { "type": "boolean" },
+            "totalFrames": { "type": "integer", "minimum": 0, "description": "Backward-compatible alias for totalSampledFrames." },
+            "totalSampledFrames": { "type": "integer", "minimum": 0 },
+            "analyzedFrames": { "type": "integer", "minimum": 0 },
+            "detectedFrames": { "type": "integer", "minimum": 0 },
+            "detectedRatio": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+            "samplingRateFps": { "const": 8, "description": "Whole-video pose sampling rate. Exact source frames remain available for manual review and on-demand inference." },
+            "operationalThreshold": { "type": "number", "minimum": 0, "maximum": 1 },
+            "eventsConfirmed": { "type": "boolean" },
+            "criticalFramesDetected": { "type": "boolean" },
+            "readyForAutomatedSummary": { "type": "boolean" },
+            "thresholdNote": { "type": "string" }
           },
           "additionalProperties": true
         }

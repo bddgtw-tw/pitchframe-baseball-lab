@@ -998,6 +998,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       || (navigator.maxTouchPoints > 1 && Math.min(window.screen.width, window.screen.height) < 900);
     const INFERENCE_MAX_EDGE = isMobileDevice ? 480 : 640;
     const SNAPSHOT_MAX_EDGE = isMobileDevice ? 540 : 720;
+    // Whole-video analysis is intentionally sampled. Exact frames are still decoded and inferred on demand while scrubbing.
+    const ANALYSIS_SAMPLE_FPS = 8;
 
     // MediaPipe & Detection State
     let pose = null;
@@ -1242,23 +1244,38 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
     function buildFrameTimes() {
       const frames = [];
+      const seen = new Set();
+      const add = (index, seekTime) => {
+        if (seen.has(index)) return;
+        seen.add(index);
+        frames.push({ index, seekTime });
+      };
+      const stepSeconds = 1 / ANALYSIS_SAMPLE_FPS;
       if (sourceFrameIndex) {
         const lastIdx = sourceFrameIndex.frameAt(Math.max(0, effectiveDuration - 0.000001));
-        for (let i = 0; i <= lastIdx; i++) frames.push({ index: i, seekTime: sourceFrameIndex.seekTime(i) });
+        for (let time = 0; time < effectiveDuration; time += stepSeconds) {
+          const index = Math.min(lastIdx, sourceFrameIndex.frameAt(time));
+          add(index, sourceFrameIndex.seekTime(index));
+        }
+        add(lastIdx, sourceFrameIndex.seekTime(lastIdx));
       } else {
-        const total = Math.max(1, Math.floor(effectiveDuration / fallbackFrameDuration));
-        for (let i = 0; i <= total; i++) frames.push({ index: i, seekTime: Math.min(effectiveDuration, i * fallbackFrameDuration) });
+        for (let time = 0; time < effectiveDuration; time += stepSeconds) {
+          add(Math.round(time / fallbackFrameDuration), Math.min(effectiveDuration, time));
+        }
+        const lastTime = Math.max(0, effectiveDuration - 0.000001);
+        add(Math.round(lastTime / fallbackFrameDuration), lastTime);
       }
       return frames;
     }
     const analysisCoverage = document.getElementById('analysisCoverage');
     function analysisCoverageSnapshot(separation = null) {
-      const total = trackJob && trackJob.source === sourceGeneration ? trackJob.total : 0;
+      const sampledKeys = trackJob && trackJob.source === sourceGeneration ? trackJob.sampledKeys : [];
+      const total = sampledKeys.length;
       let analyzedFrames = 0, detectedFrames = 0;
-      for (let i = 0; i < total; i++) {
-        if (!poseCache.has(i)) continue;
+      for (const key of sampledKeys) {
+        if (!poseCache.has(key)) continue;
         analyzedFrames++;
-        if (poseCache.get(i)) detectedFrames++;
+        if (poseCache.get(key)) detectedFrames++;
       }
       const detectedRatio = analyzedFrames ? detectedFrames / analyzedFrames : null;
       const sep = separation || (trackComplete() ? getSeparation() : null);
@@ -1268,7 +1285,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const readyForAutomatedSummary = trackComplete() && detectedRatio !== null
         && detectedRatio >= operationalThreshold && eventsConfirmed && criticalFramesDetected;
       return {
-        analysisComplete: trackComplete(), totalFrames: total, analyzedFrames, detectedFrames,
+        analysisComplete: trackComplete(), totalFrames: total, totalSampledFrames: total,
+        analyzedFrames, detectedFrames, samplingRateFps: ANALYSIS_SAMPLE_FPS,
         detectedRatio: detectedRatio === null ? null : Number(detectedRatio.toFixed(4)),
         operationalThreshold, eventsConfirmed, criticalFramesDetected, readyForAutomatedSummary,
         thresholdNote: '80% 是 PitchFrame 的保守操作門檻，不是經臨床或生物力學研究驗證的準確度標準。'
@@ -1283,8 +1301,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       }
       const pct = quality.detectedRatio === null ? 0 : Math.round(quality.detectedRatio * 100);
       analysisCoverage.textContent = quality.readyForAutomatedSummary
-        ? `骨架辨識覆蓋 ${pct}%（${quality.detectedFrames}/${quality.analyzedFrames} 格）；落地與出手格都有骨架。可進一步人工判讀。`
-        : `骨架辨識覆蓋 ${pct}%（${quality.detectedFrames}/${quality.analyzedFrames} 格）；資料尚不足以自動提出動作摘要。請確認落地／出手或重拍清楚影片。`;
+        ? `骨架辨識覆蓋 ${pct}%（${quality.detectedFrames}/${quality.analyzedFrames} 個取樣點）；落地與出手格都有骨架。可進一步人工判讀。`
+        : `骨架辨識覆蓋 ${pct}%（${quality.detectedFrames}/${quality.analyzedFrames} 個取樣點）；資料尚不足以自動提出動作摘要。請確認落地／出手或重拍清楚影片。`;
       analysisCoverage.className = quality.readyForAutomatedSummary
         ? 'mt-3 rounded-lg border border-lime-500/40 bg-lime-500/10 px-3 py-2 text-[11px] leading-relaxed text-lime-200'
         : 'mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-200';
@@ -1325,7 +1343,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const pct = Math.floor(job.done / job.total * 100);
       showPill(`骨架分析中 ${pct}%`);
       reportPoseStatus(`骨架分析中 ${pct}%`,
-        `已分析 ${job.done}／${job.total} 格。進度條亮綠色的範圍已可播放、逐格，骨架與畫面同一格。`);
+        `已分析 ${job.done}／${job.total} 個取樣點。播放與逐格時，尚未取樣的影格會依需要即時分析。`);
     }
 
     function cancelTrackAnalysis() {
@@ -1465,7 +1483,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const source = sourceGeneration, engine = pose, epoch = poseEpoch, url = currentVideoObjectUrl;
       const choice = targetChoice;
       const frames = buildFrameTimes();
-      const job = { source, total: frames.length, done: 0, running: true, complete: false, failed: false };
+      const job = { source, total: frames.length, sampledKeys: frames.map(frame => frame.index), done: 0, running: true, complete: false, failed: false };
       trackJob = job;
       const stale = () => trackJob !== job || source !== sourceGeneration || epoch !== poseEpoch || engine !== pose || targetChoice !== choice;
       const n = frames.length;
@@ -1589,7 +1607,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         setAnalyzedSpan(0, 1);
         showPill('');
         reportPoseStatus('骨架分析完成',
-          `整段 ${job.total} 格已分析。播放、慢動作、逐格與拖曳都直接顯示該格骨架${hasEverDetectedRealPerson ? '' : '；但整段都沒有偵測到人物'}。`);
+          `整段 ${job.total} 個取樣點已分析。播放、慢動作、逐格與拖曳到未取樣影格時會即時補分析${hasEverDetectedRealPerson ? '' : '；但取樣點都沒有偵測到人物'}。`);
         statusDot.className = 'w-2 h-2 rounded-full bg-emerald-400';
         renderStage();
         renderAnalysisCoverage();
@@ -2305,7 +2323,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         poseByKey: poseCache,
         width: video.videoWidth || 1,
         height: video.videoHeight || 1,
-        fps: sourceFrameIndex && sourceFrameIndex.fps ? sourceFrameIndex.fps : 30,
+        fps: ANALYSIS_SAMPLE_FPS,
         handedness: analysisContext.handedness,
         credible: credibleBodyPoint
       });
@@ -2365,22 +2383,22 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const ctx = sepStrip.getContext('2d');
       ctx.clearRect(0, 0, w, h);
       const sep = sepCache; if (!sep || !sep.keys.length) return;
-      const lastKey = getPoseCacheKey(Math.max(0, effectiveDuration - 0.000001)) || sep.keys[sep.keys.length - 1] || 1;
       const y0 = 4 * dpr, bh = h - 8 * dpr;
       ctx.fillStyle = 'rgba(226,232,240,0.12)'; ctx.fillRect(0, y0, w, bh);
-      const cell = Math.max(1, w / (lastKey + 1));
+      const duration = Math.max(0.001, effectiveDuration);
+      const cell = Math.max(1, w / Math.max(1, duration * ANALYSIS_SAMPLE_FPS));
       for (const k of sep.keys) {
         const t = sep.level.get(k); if (t === null || t === undefined) continue;
-        ctx.fillStyle = sepColor(t, 0.85); // 熱度帶：白 → 紅
-        ctx.fillRect(k / (lastKey + 1) * w, y0, Math.ceil(cell), bh);
+        ctx.fillStyle = sepColor(t, 0.85);
+        ctx.fillRect(sepKeyTime(k) / duration * w, y0, Math.ceil(cell), bh);
       }
       if (sep.release !== null) {
-        const x = (sep.release + 0.5) / (lastKey + 1) * w;
+        const x = sepKeyTime(sep.release) / duration * w;
         ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 2 * dpr; ctx.setLineDash([3 * dpr, 3 * dpr]);
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); ctx.setLineDash([]);
       }
       if (sep.foot !== null) {
-        const x = (sep.foot + 0.5) / (lastKey + 1) * w;
+        const x = sepKeyTime(sep.foot) / duration * w;
         ctx.fillStyle = '#020617'; ctx.strokeStyle = '#f8fafc'; ctx.lineWidth = 2.5 * dpr;
         ctx.beginPath(); ctx.arc(x, h / 2, 6 * dpr, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       }
