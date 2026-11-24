@@ -17,6 +17,13 @@ Repository/project slug: `pitchframe-baseball-lab`.
 - 這是實驗預覽，不是醫療診斷或精準動作量測工具。姿態辨識仍需使用者核對。
 - 需要近期 Chrome／Edge 等支援 WebGL 與 WebAssembly 的瀏覽器。模型載入失敗會顯示錯誤及重試按鈕。
 
+## 加到手機主畫面（PWA）
+
+- **iPhone（Safari）**：開啟網站 → 分享 → 「加入主畫面」。
+- **Android（Chrome）**：開啟網站 → 右上選單 → 「安裝應用程式」或「加到主畫面」。
+
+從主畫面開啟會全螢幕顯示。成功分析過一次影片後，程式與 AI 模型會存在手機上，球場沒有訊號也能使用。影片本身不會被存進快取，也不會上傳。
+
 ## Static hosting
 
 All runtime assets are bundled at the project root, referenced with relative paths. No CDN script or model fetch is required. Serve the files over HTTP/HTTPS; `file://` is not supported. `.nojekyll` keeps the distribution as plain static files. This package does not include an upload endpoint, analytics integration, Windows launcher or demo video.
