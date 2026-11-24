@@ -753,6 +753,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       </div>
     </div>
 
+    <div id="analysisCoverage" class="mt-3 rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-[11px] leading-relaxed text-slate-400" aria-live="polite">
+      載入影片並完成整段骨架分析後，這裡會顯示實際辨識覆蓋率。
+    </div>
+
     <section id="progressTracker" aria-labelledby="progressTitle">
       <div class="flex flex-wrap items-center justify-between gap-2">
         <div>
@@ -1249,6 +1253,44 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       }
       return frames;
     }
+    const analysisCoverage = document.getElementById('analysisCoverage');
+    function analysisCoverageSnapshot(separation = null) {
+      const total = trackJob && trackJob.source === sourceGeneration ? trackJob.total : 0;
+      let analyzedFrames = 0, detectedFrames = 0;
+      for (let i = 0; i < total; i++) {
+        if (!poseCache.has(i)) continue;
+        analyzedFrames++;
+        if (poseCache.get(i)) detectedFrames++;
+      }
+      const detectedRatio = analyzedFrames ? detectedFrames / analyzedFrames : null;
+      const sep = separation || (trackComplete() ? getSeparation() : null);
+      const eventsConfirmed = !!(sep && sep.foot !== null && sep.release !== null);
+      const criticalFramesDetected = !!(eventsConfirmed && poseCache.get(sep.foot) && poseCache.get(sep.release));
+      const operationalThreshold = 0.8;
+      const readyForAutomatedSummary = trackComplete() && detectedRatio !== null
+        && detectedRatio >= operationalThreshold && eventsConfirmed && criticalFramesDetected;
+      return {
+        analysisComplete: trackComplete(), totalFrames: total, analyzedFrames, detectedFrames,
+        detectedRatio: detectedRatio === null ? null : Number(detectedRatio.toFixed(4)),
+        operationalThreshold, eventsConfirmed, criticalFramesDetected, readyForAutomatedSummary,
+        thresholdNote: '80% 是 PitchFrame 的保守操作門檻，不是經臨床或生物力學研究驗證的準確度標準。'
+      };
+    }
+    function renderAnalysisCoverage() {
+      const quality = analysisCoverageSnapshot();
+      if (!quality.analysisComplete) {
+        analysisCoverage.textContent = '載入影片並完成整段骨架分析後，這裡會顯示實際辨識覆蓋率。';
+        analysisCoverage.className = 'mt-3 rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-[11px] leading-relaxed text-slate-400';
+        return;
+      }
+      const pct = quality.detectedRatio === null ? 0 : Math.round(quality.detectedRatio * 100);
+      analysisCoverage.textContent = quality.readyForAutomatedSummary
+        ? `骨架辨識覆蓋 ${pct}%（${quality.detectedFrames}/${quality.analyzedFrames} 格）；落地與出手格都有骨架。可進一步人工判讀。`
+        : `骨架辨識覆蓋 ${pct}%（${quality.detectedFrames}/${quality.analyzedFrames} 格）；資料尚不足以自動提出動作摘要。請確認落地／出手或重拍清楚影片。`;
+      analysisCoverage.className = quality.readyForAutomatedSummary
+        ? 'mt-3 rounded-lg border border-lime-500/40 bg-lime-500/10 px-3 py-2 text-[11px] leading-relaxed text-lime-200'
+        : 'mt-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] leading-relaxed text-amber-200';
+    }
 
     function waitForMediaEvent(media, eventName, milliseconds, message) {
       return new Promise((resolve, reject) => {
@@ -1294,6 +1336,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       analysisPoseResolver = null;
       setAnalyzedSpan(0, 0);
       showPill('');
+      renderAnalysisCoverage();
     }
     function resetAnalysisVideo() {
       cancelTrackAnalysis();
@@ -1551,6 +1594,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           `整段 ${job.total} 格已分析。播放、慢動作、逐格與拖曳都直接顯示該格骨架${hasEverDetectedRealPerson ? '' : '；但整段都沒有偵測到人物'}。`);
         statusDot.className = 'w-2 h-2 rounded-full bg-emerald-400';
         renderStage();
+        renderAnalysisCoverage();
       } catch (err) {
         if (stale()) return;
         analysisPoseResolver = null;
@@ -3660,6 +3704,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         : sep.footLevel === null ? '落地附近資料不足，不判讀'
         : sep.footLevel >= 0.5 ? '落地附近出現較明顯的骨盆－上軀幹旋轉差趨勢'
         : '落地附近未見明顯的骨盆－上軀幹旋轉差趨勢';
+      const poseCoverage = analysisCoverageSnapshot(sep);
       const data = {
         schema: 'pitchframe-analysis-package-v1',
         createdAt: new Date().toISOString(),
@@ -3686,7 +3731,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         analysisReadiness: {
           contextComplete,
           missingFields: missingContext,
-          normalConditionForComparison: analysisContext.condition === 'normal'
+          normalConditionForComparison: analysisContext.condition === 'normal',
+          poseCoverage
         },
         captureQuality: {
           ...captureQuality,
@@ -3733,7 +3779,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       };
       return `# PitchFrame AI 教練分析包\n\n` +
         `> 目的：協助家長、球員與教練根據同一段影片提出可驗證的觀察。這不是醫療診斷或自動姿勢評分。\n\n` +
-        `## 給 AI 的任務\n\n請先檢查資料品質、拍攝視角、年齡層與限制，再依「下肢承接 → 骨盆 → 上軀幹 → 手臂 → 出手」的順序分析。每一項建議都要引用具體時間點或數值，區分【觀察】【推論】【待確認】。只有 comparison.sameContext 為 true，且錄影距離、角度與影格率可比較時，才能描述前後變化；否則不得宣稱進步或退步。不要只因單一角度或單次投球判定好壞；不要給疼痛診斷。若 condition 是 pain 或 fatigued，先建議停止高強度投球、告知成人並尋求適當專業評估，不要把疲勞或疼痛直接改寫成技術缺陷。最後只提出 1 個最值得優先驗證的動作線索、1 個低風險練習方向，以及下次應如何用同角度重拍驗證。若沒有附關鍵畫面或影片，請先要求使用者補上，不要假裝看過。\n\n` +
+        `## 給 AI 的任務\n\n請先檢查資料品質、拍攝視角、年齡層與限制。若 analysisReadiness.poseCoverage.readyForAutomatedSummary 不是 true，先說明資料不足並要求補拍或人工確認，不得提出動作修正。資料足夠時，再依「下肢承接 → 骨盆 → 上軀幹 → 手臂 → 出手」的順序分析。每一項建議都要引用具體時間點或數值，區分【觀察】【推論】【待確認】。只有 comparison.sameContext 為 true，且錄影距離、角度與影格率可比較時，才能描述前後變化；否則不得宣稱進步或退步。不要只因單一角度或單次投球判定好壞；不要給疼痛診斷。若 condition 是 pain 或 fatigued，先建議停止高強度投球、告知成人並尋求適當專業評估，不要把疲勞或疼痛直接改寫成技術缺陷。最後只提出 1 個最值得優先驗證的動作線索、1 個低風險練習方向，以及下次應如何用同角度重拍驗證。若沒有附關鍵畫面或影片，請先要求使用者補上，不要假裝看過。\n\n` +
         `## 結構化資料\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\`\n\n` +
         `## 建議一起提供\n\n- 前腳落地前一格、落地格、出手格的 PNG\n- 原始影片或 PitchFrame 匯出的骨架影片\n- 投手慣用手、年齡層、這次是平地或投手丘\n- 當天是否疼痛或明顯疲勞（若有，先停止投球並尋求專業評估）\n`;
     }
