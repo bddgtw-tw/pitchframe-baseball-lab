@@ -14,7 +14,7 @@ const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(match => match[1]);
 const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
 if (duplicates.length) fail(`Duplicate HTML ids: ${duplicates.join(', ')}`);
 
-for (const requiredId of ['videoPlayer', 'scrubber', 'btnExportPNG', 'btnExportVideo', 'btnExportAI', 'btnShareApp']) {
+for (const requiredId of ['videoPlayer', 'scrubber', 'btnExportPNG', 'btnExportVideo', 'btnExportAI', 'btnShareApp', 'ctxHandedness', 'ctxAgeGroup', 'ctxCameraView', 'ctxSurface', 'ctxCondition']) {
   if (!ids.includes(requiredId)) fail(`Required control is missing: ${requiredId}`);
 }
 

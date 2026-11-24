@@ -234,9 +234,14 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     .guide-number { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: #bef264; color: #14202b; font-weight: 900; }
     .science-note { margin-top: 12px; padding-top: 12px; border-top: 1px solid #2a3e4e; color: #a8bbc8; font-size: 12px; line-height: 1.65; }
     .header-link { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0 10px; border: 1px solid #405669; border-radius: 8px; color: #d7e4ec; font-size: 12px; font-weight: 700; }
+    #analysisContext { margin: -6px 0 14px; padding: 14px 16px; border: 1px solid #2a3e4e; border-radius: 12px; background: #0d1822; }
+    #contextFields { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; margin-top: 10px; }
+    #contextFields label { display: grid; gap: 5px; color: #a8bbc8; font-size: 11px; }
+    #contextFields select { min-width: 0; min-height: 42px; padding: 0 10px; border: 1px solid #405669; border-radius: 8px; background: #101b27; color: #f1f5f9; font-size: 13px; }
     @media (min-width: 640px) {
       #exportActions { display: flex; }
       #parentGuide ol { grid-template-columns: repeat(3,minmax(0,1fr)); }
+      #contextFields { grid-template-columns: repeat(5,minmax(0,1fr)); }
       #telemetryGrid { grid-template-columns: repeat(5,minmax(0,1fr)); gap: 16px; }
       #telemetryGrid > div { flex-direction: column; align-items: stretch; gap: 10px; }
     }
@@ -349,6 +354,60 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         <li><span class="guide-number">3</span><span><b>匯出畫面或 AI 分析包</b><br>帶著具體影格和數據問教練，比只說「姿勢怪怪的」更容易討論。</span></li>
       </ol>
       <p class="science-note"><b class="text-slate-200">先說清楚：</b>PitchFrame 是觀察與溝通工具，不是醫療、傷害預測或實驗室 3D 動作分析。單機位 AI 深度與自動事件點都是估計值；少棒球員應優先觀察疲勞、疼痛與投球量，技術調整請由合格教練依年齡與個別狀況判斷。</p>
+    </section>
+
+    <section id="analysisContext" aria-labelledby="analysisContextTitle">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <h2 id="analysisContextTitle" class="text-sm font-bold text-slate-100">這次投球的分析背景</h2>
+          <p class="mt-1 text-[11px] text-slate-400">只存在這台裝置，不填姓名或球隊。慣用手會協助判斷出手手腕；其他欄位會寫入 AI 分析包，避免 AI 亂猜。</p>
+        </div>
+        <span id="contextSaved" class="hidden shrink-0 text-[11px] font-bold text-lime-300">已儲存</span>
+      </div>
+      <div id="contextFields">
+        <label>投球手
+          <select id="ctxHandedness">
+            <option value="unknown">尚未設定</option>
+            <option value="right">右投</option>
+            <option value="left">左投</option>
+          </select>
+        </label>
+        <label>年齡層
+          <select id="ctxAgeGroup">
+            <option value="unknown">尚未設定</option>
+            <option value="U8">U8</option>
+            <option value="U10">U10</option>
+            <option value="U12">U12</option>
+            <option value="U15">U15</option>
+            <option value="16+">16 歲以上</option>
+          </select>
+        </label>
+        <label>拍攝視角
+          <select id="ctxCameraView">
+            <option value="unknown">尚未設定</option>
+            <option value="side-rear">側後方</option>
+            <option value="side">正側面</option>
+            <option value="rear">正後方</option>
+            <option value="front">正前方</option>
+          </select>
+        </label>
+        <label>投球環境
+          <select id="ctxSurface">
+            <option value="unknown">尚未設定</option>
+            <option value="mound">投手丘</option>
+            <option value="flat-ground">平地</option>
+          </select>
+        </label>
+        <label>身體狀況
+          <select id="ctxCondition">
+            <option value="unknown">尚未設定</option>
+            <option value="normal">沒有疼痛或明顯疲勞</option>
+            <option value="fatigued">明顯疲勞</option>
+            <option value="pain">有疼痛</option>
+          </select>
+        </label>
+      </div>
+      <p id="conditionWarning" class="hidden mt-3 rounded-lg border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-200"></p>
     </section>
 
     <div id="stageStatusBar" style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;flex-shrink:0">
@@ -792,6 +851,42 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     let videoDuration = 0;
     let effectiveDuration = 0;
     let currentVideoMeta = null;
+    const contextControls = {
+      handedness: document.getElementById('ctxHandedness'),
+      ageGroup: document.getElementById('ctxAgeGroup'),
+      cameraView: document.getElementById('ctxCameraView'),
+      surface: document.getElementById('ctxSurface'),
+      condition: document.getElementById('ctxCondition')
+    };
+    const contextSaved = document.getElementById('contextSaved');
+    const conditionWarning = document.getElementById('conditionWarning');
+    let analysisContext = { handedness: 'unknown', ageGroup: 'unknown', cameraView: 'unknown', surface: 'unknown', condition: 'unknown' };
+    try {
+      const saved = JSON.parse(localStorage.getItem('pf-analysis-context') || 'null');
+      if (saved && typeof saved === 'object') analysisContext = { ...analysisContext, ...saved };
+    } catch (_) {}
+    function syncAnalysisContext() {
+      for (const [key, control] of Object.entries(contextControls)) {
+        if ([...control.options].some(option => option.value === analysisContext[key])) control.value = analysisContext[key];
+      }
+      const stop = analysisContext.condition === 'pain';
+      const caution = analysisContext.condition === 'fatigued';
+      conditionWarning.classList.toggle('hidden', !stop && !caution);
+      conditionWarning.textContent = stop
+        ? '目前標記為有疼痛：請停止投球。PitchFrame 不應用來判斷能否繼續，請告知家長／教練並尋求合格醫療專業評估。'
+        : caution ? '目前標記為明顯疲勞：先停止高強度投球並休息。疲勞狀態下的動作不宜直接當成技術問題下結論。' : '';
+    }
+    for (const [key, control] of Object.entries(contextControls)) {
+      control.addEventListener('change', () => {
+        analysisContext[key] = control.value;
+        try { localStorage.setItem('pf-analysis-context', JSON.stringify(analysisContext)); } catch (_) {}
+        if (key === 'handedness') sepCache = null;
+        syncAnalysisContext();
+        contextSaved.classList.remove('hidden');
+        setTimeout(() => contextSaved.classList.add('hidden'), 1400);
+      });
+    }
+    syncAnalysisContext();
     let isTimelineDragging = false;
     let timelineSeekTarget = null;
     let showSkeleton = true;
@@ -2085,7 +2180,10 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (foot !== null) {
         // 出手：落地後 0.5 秒內，投球手腕伸到「最靠近目標方向」的那一格（目標方向＝跨步方向）。
         // 揮臂那幾格常常糊掉、可信度低，所以這裡只要求座標存在、可信度 ≥ 0.2。
-        const wristIdx = stride.idx === 27 ? 16 : 15; // 跨步腳是左腳時，投球手是右手，反之亦然
+        // 明確設定的慣用手優先；沒設定時才從跨步腳推估。
+        const wristIdx = analysisContext.handedness === 'right' ? 16
+          : analysisContext.handedness === 'left' ? 15
+          : stride.idx === 27 ? 16 : 15;
         const startX = stride.xs[stride.onset], footX = stride.xs[foot];
         const dir = (footX !== null && startX !== null && footX < startX) ? -1 : 1;
         const fps = sourceFrameIndex && sourceFrameIndex.fps ? sourceFrameIndex.fps : 30;
@@ -3359,6 +3457,14 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
             variableFrameRate: !!sourceFrameIndex.variableFrameRate
           } : null
         },
+        athleteContext: {
+          throwingHand: analysisContext.handedness,
+          ageGroup: analysisContext.ageGroup,
+          cameraView: analysisContext.cameraView,
+          throwingSurface: analysisContext.surface,
+          condition: analysisContext.condition,
+          privacyNote: '未收集姓名、球隊或其他身分資料'
+        },
         currentFrame: {
           timeSeconds: Number(displayedFrameTime().toFixed(3)),
           trunkTilt: textMetric(telTrunkTilt),
@@ -3383,7 +3489,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       };
       return `# PitchFrame AI 教練分析包\n\n` +
         `> 目的：協助家長、球員與教練根據同一段影片提出可驗證的觀察。這不是醫療診斷或自動姿勢評分。\n\n` +
-        `## 給 AI 的任務\n\n請先檢查資料品質與限制，再依「下肢承接 → 骨盆 → 上軀幹 → 手臂 → 出手」的順序分析。每一項建議都要引用具體時間點或數值，區分【觀察】【推論】【待確認】。不要只因單一角度或單次投球判定好壞；不要給疼痛診斷。最後只提出 1 個最值得優先驗證的動作線索、1 個低風險練習方向，以及下次應如何用同角度重拍驗證。若沒有附關鍵畫面或影片，請先要求使用者補上，不要假裝看過。\n\n` +
+        `## 給 AI 的任務\n\n請先檢查資料品質、拍攝視角、年齡層與限制，再依「下肢承接 → 骨盆 → 上軀幹 → 手臂 → 出手」的順序分析。每一項建議都要引用具體時間點或數值，區分【觀察】【推論】【待確認】。不要只因單一角度或單次投球判定好壞；不要給疼痛診斷。若 condition 是 pain 或 fatigued，先建議停止高強度投球、告知成人並尋求適當專業評估，不要把疲勞或疼痛直接改寫成技術缺陷。最後只提出 1 個最值得優先驗證的動作線索、1 個低風險練習方向，以及下次應如何用同角度重拍驗證。若沒有附關鍵畫面或影片，請先要求使用者補上，不要假裝看過。\n\n` +
         `## 結構化資料\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\`\n\n` +
         `## 建議一起提供\n\n- 前腳落地前一格、落地格、出手格的 PNG\n- 原始影片或 PitchFrame 匯出的骨架影片\n- 投手慣用手、年齡層、這次是平地或投手丘\n- 當天是否疼痛或明顯疲勞（若有，先停止投球並尋求專業評估）\n`;
     }
