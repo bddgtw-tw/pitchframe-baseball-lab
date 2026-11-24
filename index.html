@@ -779,8 +779,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         <span>✨</span>
         <span>下載 AI 教練分析包</span>
       </button>
+      <button id="btnShareAI" class="bg-sky-500 hover:bg-sky-400 active:scale-95 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition flex items-center gap-1.5 shadow-md">
+        <span>↗</span>
+        <span id="btnShareAIText">分享給 AI／教練</span>
+      </button>
     </div>
-    <p class="mt-2 text-[11px] text-slate-500 leading-relaxed">AI 分析包是文字檔，包含拍攝條件、目前數值、關鍵事件與提問格式；不含原始影片，也不會自動上傳。請自行檢查內容後再交給 AI 或教練。</p>
+    <p class="mt-2 text-[11px] text-slate-500 leading-relaxed">AI 分析包是文字檔，包含拍攝條件、目前數值、關鍵事件與提問格式；不含原始影片，也不會自動上傳。「分享」只會在你按下後開啟手機分享選單；不支援時改為複製文字。</p>
+    <p id="aiHandoffStatus" class="mt-1 text-[11px] text-sky-300" aria-live="polite"></p>
 
     </section>
 
@@ -883,6 +888,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const btnExportVideo = document.getElementById('btnExportVideo');
     const btnExportVideoText = document.getElementById('btnExportVideoText');
     const btnExportAI = document.getElementById('btnExportAI');
+    const btnShareAI = document.getElementById('btnShareAI');
+    const btnShareAIText = document.getElementById('btnShareAIText');
+    const aiHandoffStatus = document.getElementById('aiHandoffStatus');
     const btnShareApp = document.getElementById('btnShareApp');
     const btnInstallApp = document.getElementById('btnInstallApp');
     const exportModal = document.getElementById('exportModal');
@@ -3712,6 +3720,36 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       link.download = `PitchFrame_AI分析包_${new Date().toISOString().slice(0, 10)}.md`;
       link.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+    });
+
+    btnShareAI.addEventListener('click', async () => {
+      if (!video.videoWidth) { alert('請先載入並分析一段投球影片。'); return; }
+      const content = aiAnalysisPackage();
+      const fileName = `PitchFrame_AI分析包_${new Date().toISOString().slice(0, 10)}.md`;
+      btnShareAI.disabled = true;
+      btnShareAIText.textContent = '準備分享…';
+      aiHandoffStatus.textContent = '';
+      try {
+        const file = new File([content], fileName, { type: 'text/markdown;charset=utf-8' });
+        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ title: 'PitchFrame AI 教練分析包', text: '請先閱讀資料品質與限制，再根據關鍵時間點提供建議。', files: [file] });
+          aiHandoffStatus.textContent = '已開啟分享選單；實際接收對象由你決定。';
+        } else if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(content);
+          aiHandoffStatus.textContent = '分析內容已複製，可直接貼到 AI 對話或傳給教練。';
+        } else {
+          throw new Error('此瀏覽器不支援檔案分享或剪貼簿');
+        }
+      } catch (err) {
+        if (err && err.name === 'AbortError') aiHandoffStatus.textContent = '已取消分享，資料沒有傳出。';
+        else {
+          aiHandoffStatus.textContent = '無法直接分享，請改用「下載 AI 教練分析包」。';
+          alert('此瀏覽器無法直接分享或複製，請改用「下載 AI 教練分析包」。');
+        }
+      } finally {
+        btnShareAI.disabled = false;
+        btnShareAIText.textContent = '分享給 AI／教練';
+      }
     });
 
     // 輸出目前影格 PNG
