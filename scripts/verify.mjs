@@ -18,7 +18,7 @@ const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map(match => match[1]);
 const duplicates = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
 if (duplicates.length) fail(`Duplicate HTML ids: ${duplicates.join(', ')}`);
 
-for (const requiredId of ['captureView', 'workView', 'resultPanel', 'videoPlayer', 'scrubber', 'btnEmptyCapture', 'btnEmptyChoose', 'btnPlayPause', 'speedControls', 'btnJumpLift', 'btnJumpFoot', 'btnJumpMer', 'btnJumpRelease', 'btnMarkLift', 'btnMarkFoot', 'btnMarkMer', 'btnMarkRelease', 'btnShareResult', 'btnExportVideo', 'btnShareAI', 'aiHandoffStatus', 'btnShareApp', 'analysisCoverage']) {
+for (const requiredId of ['captureView', 'workView', 'resultPanel', 'videoPlayer', 'scrubber', 'btnEmptyCapture', 'btnEmptyChoose', 'btnPlayPause', 'speedControls', 'btnJumpLift', 'btnJumpFoot', 'btnJumpMer', 'btnJumpRelease', 'btnSetKey', 'btnShareResult', 'btnExportVideo', 'btnShareAI', 'aiHandoffStatus', 'btnShareApp', 'analysisCoverage']) {
   if (!ids.includes(requiredId)) fail(`Required control is missing: ${requiredId}`);
 }
 for (const qualityBehavior of ['analysisCoverageSnapshot', 'operationalThreshold = 0.8', 'readyForAutomatedSummary', '80% 是 PitchFrame 的保守操作門檻']) {
@@ -45,7 +45,7 @@ for (const performanceBehavior of [ 'if (!isPoseModelReady && !poseInitPromise) 
 for (const samplingBehavior of ['const ANALYSIS_SAMPLE_FPS = 8', 'sampledKeys: frames.map(frame => frame.index)', '個取樣點', 'fps: ANALYSIS_SAMPLE_FPS']) {
   if (!html.includes(samplingBehavior)) fail(`Bounded whole-video sampling is missing: ${samplingBehavior}`);
 }
-for (const eventSyncBehavior of ['function currentManualEventKey()', 'poseMatchesFrame() ? currentPoseStamp : frameStamp()', 'manualRelease = currentManualEventKey()', 'sepCache = null; renderStage(); renderAnalysisCoverage()', 'function updateEventChips(sep)']) {
+for (const eventSyncBehavior of ['function currentManualEventKey()', 'poseMatchesFrame() ? currentPoseStamp : frameStamp()', 'EVENT_DEFS[selectedEvent].set(currentManualEventKey())', 'renderStage(); renderAnalysisCoverage()', 'function updateEventChips(sep)']) {
   if (!html.includes(eventSyncBehavior)) fail(`Manual event/frame synchronization is missing: ${eventSyncBehavior}`);
 }
 for (const blockingBehavior of ['src="./tailwind.js"', "addEventListener('DOMContentLoaded', initMediaPipe)", 'user-scalable=no', 'btnInstallApp', 'beforeinstallprompt', 'btnSmooth', 'blendCanvas', 'sessionSetup', 'btnPrev5', 'btnNext5', 'btnCapture', 'btnChoose', 'telemetryGrid', 'currentFrame: {', 'ctxHandedness', 'qualityFullBody', 'progressSection', 'pf-progress-history', 'athleteContext:', 'captureQuality:', 'comparison: {']) {
