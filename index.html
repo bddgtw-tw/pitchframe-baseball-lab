@@ -214,14 +214,18 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     #speedControls button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
     .hold-active { box-shadow: 0 0 0 2px var(--accent); }
     .section-label { margin: 20px 0 8px; font-size: 14px; font-weight: 700; color: var(--muted); }
-    #keyFrames { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    .key { display: grid; gap: 6px; }
-    .key-jump { min-height: 72px; padding: 10px 12px; border-radius: 14px; background: var(--surface); border: 2px solid var(--line);
-      text-align: left; display: grid; gap: 2px; }
-    .key-jump.is-current { border-color: var(--accent); }
-    .key-name { font-size: 17px; font-weight: 800; }
-    .key-info { font-size: 13px; color: var(--muted); }
-    .key-set { min-height: 44px; border-radius: 10px; font-size: 14px; color: var(--muted); border: 1px dashed var(--line); }
+    #keyFrames { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .key-jump { min-height: 76px; padding: 8px 2px; border-radius: 12px; background: var(--surface); border: 2px solid var(--line);
+      text-align: center; display: grid; gap: 2px; align-content: center; }
+    .key-jump.is-selected { border-color: var(--accent); background: rgba(190, 242, 100, .1); }
+    .key-n { justify-self: center; width: 20px; height: 20px; border-radius: 10px; background: var(--line); font-size: 12px; line-height: 20px; font-weight: 700; }
+    .key-jump.is-selected .key-n { background: var(--accent); color: var(--accent-ink); }
+    .key-name { font-size: 15px; font-weight: 800; }
+    .key-info { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    .key-jump.is-missing .key-info { color: #fbbf24; }
+    .key-set { margin-top: 8px; width: 100%; min-height: 48px; padding: 6px 12px; border-radius: 12px; font-size: 14px; color: var(--muted);
+      border: 1px solid var(--line); line-height: 1.4; }
+    .key-set.is-action { color: var(--accent); border: 2px solid var(--accent); font-size: 15px; font-weight: 800; }
     #resultActions { margin-top: 20px; }
     .more-links { margin-top: 12px; display: flex; flex-wrap: wrap; justify-content: center; gap: 0 18px; }
     .more-links button { min-height: 44px; font-size: 14px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
@@ -343,25 +347,15 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           <button type="button" data-rate="1" aria-pressed="true">1×</button>
         </div>
 
-        <p class="section-label">關鍵四格（點一下跳過去）</p>
-        <div id="keyFrames">
-          <div class="key">
-            <button id="btnJumpLift" class="key-jump" type="button"><span class="key-name">抬腿最高點</span><span id="liftInfo" class="key-info">尋找中…</span></button>
-            <button id="btnMarkLift" class="key-set" type="button">改成目前這格</button>
-          </div>
-          <div class="key">
-            <button id="btnJumpFoot" class="key-jump" type="button"><span class="key-name">前腳落地</span><span id="footInfo" class="key-info">尋找中…</span></button>
-            <button id="btnMarkFoot" class="key-set" type="button">改成目前這格</button>
-          </div>
-          <div class="key">
-            <button id="btnJumpMer" class="key-jump" type="button"><span class="key-name">最大外旋</span><span id="merInfo" class="key-info">尋找中…</span></button>
-            <button id="btnMarkMer" class="key-set" type="button">改成目前這格</button>
-          </div>
-          <div class="key">
-            <button id="btnJumpRelease" class="key-jump" type="button"><span class="key-name">出手</span><span id="releaseInfo" class="key-info">尋找中…</span></button>
-            <button id="btnMarkRelease" class="key-set" type="button">改成目前這格</button>
-          </div>
+        <p class="section-label">關鍵四格　點一下跳過去</p>
+        <div id="keyFrames" role="group" aria-label="關鍵四格">
+          <button id="btnJumpLift" class="key-jump" type="button" data-event="lift"><span class="key-n">1</span><span class="key-name">抬腿</span><span id="liftInfo" class="key-info">尋找中…</span></button>
+          <button id="btnJumpFoot" class="key-jump" type="button" data-event="foot"><span class="key-n">2</span><span class="key-name">落地</span><span id="footInfo" class="key-info">尋找中…</span></button>
+          <button id="btnJumpMer" class="key-jump" type="button" data-event="mer"><span class="key-n">3</span><span class="key-name">外旋</span><span id="merInfo" class="key-info">尋找中…</span></button>
+          <button id="btnJumpRelease" class="key-jump" type="button" data-event="release"><span class="key-n">4</span><span class="key-name">出手</span><span id="releaseInfo" class="key-info">尋找中…</span></button>
         </div>
+        <!-- 只有一顆設定按鈕：按鈕上寫出會改哪一格、改成幾秒 -->
+        <button id="btnSetKey" class="key-set" type="button" aria-live="polite">分析完成後可以調整</button>
         <p id="analysisCoverage" class="note warn hidden" aria-live="polite"></p>
 
         <div id="resultActions">
@@ -1800,55 +1794,63 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       video.currentTime = target;
       if (!video.seeking) { timelineSeekTarget = null; observePresentedFrame(); triggerPoseInference(); renderStage(); }
     }
-    btnJumpLift.addEventListener('click', () => { const s = getSeparation(); if (s) jumpToKey(s.legLift); });
-    btnJumpFoot.addEventListener('click', () => { const s = getSeparation(); if (s) jumpToKey(s.foot); });
-    btnJumpMer.addEventListener('click', () => { const s = getSeparation(); if (s) jumpToKey(s.mer); });
-    btnJumpRelease.addEventListener('click', () => { const s = getSeparation(); if (s) jumpToKey(s.release); });
+    // 關鍵四格：點一格 → 跳過去並「選取」它；底下唯一的按鈕只會改目前選取的那一格
+    let selectedEvent = 'foot';
+    const EVENT_DEFS = {
+      lift: { name: '抬腿最高點', button: btnJumpLift, info: liftInfo, key: s => s.legLift, manual: s => s.manualLift, set: k => { manualLift = k; } },
+      foot: { name: '前腳落地', button: btnJumpFoot, info: footInfo, key: s => s.foot, manual: s => s.manualFoot, set: k => { manualFoot = k; } },
+      mer: { name: '最大外旋', button: btnJumpMer, info: merInfo, key: s => s.mer, manual: s => s.manualMer, rough: s => s.merRough, set: k => { manualMer = k; } },
+      release: { name: '出手', button: btnJumpRelease, info: releaseInfo, key: s => s.release, manual: s => s.manualRelease, set: k => { manualRelease = k; } }
+    };
+    const btnSetKey = document.getElementById('btnSetKey');
+    Object.entries(EVENT_DEFS).forEach(([id, def]) => def.button.addEventListener('click', () => {
+      selectedEvent = id;
+      const s = getSeparation();
+      const key = s ? def.key(s) : null;
+      if (key !== null && key !== undefined) jumpToKey(key);
+      else { if (isPlaying) pauseVideo(false, false); renderStage(); }
+    }));
     function currentManualEventKey() {
       // Prefer the exact decoded frame that produced the visible skeleton. video.currentTime can
       // differ slightly from requestVideoFrameCallback mediaTime and otherwise point at a cache miss.
       const stamp = poseMatchesFrame() ? currentPoseStamp : frameStamp();
       return getPoseCacheKey(stamp && Number.isFinite(stamp.time) ? stamp.time : displayedFrameTime());
     }
-    document.getElementById('btnMarkLift').addEventListener('click', () => {
-      if (!video.videoWidth) return;
+    btnSetKey.addEventListener('click', () => {
+      if (!video.videoWidth || !btnSetKey.classList.contains('is-action')) return;
       if (isPlaying) pauseVideo(false, false);
-      manualLift = currentManualEventKey();
-      sepCache = null; renderStage(); renderAnalysisCoverage();
-    });
-    document.getElementById('btnMarkMer').addEventListener('click', () => {
-      if (!video.videoWidth) return;
-      if (isPlaying) pauseVideo(false, false);
-      manualMer = currentManualEventKey();
-      sepCache = null; renderStage(); renderAnalysisCoverage();
-    });
-    document.getElementById('btnMarkFoot').addEventListener('click', () => {
-      if (!video.videoWidth) return;
-      if (isPlaying) pauseVideo(false, false);
-      manualFoot = currentManualEventKey();
-      sepCache = null; renderStage(); renderAnalysisCoverage();
-    });
-    document.getElementById('btnMarkRelease').addEventListener('click', () => {
-      if (!video.videoWidth) return;
-      if (isPlaying) pauseVideo(false, false);
-      manualRelease = currentManualEventKey();
+      EVENT_DEFS[selectedEvent].set(currentManualEventKey());
       sepCache = null; renderStage(); renderAnalysisCoverage();
     });
     function updateEventChips(sep) {
       const current = video.videoWidth ? currentManualEventKey() : null;
-      const show = (button, info, key, manual, rough = false) => {
-        if (key === null || key === undefined) {
-          info.textContent = trackComplete() ? '沒找到，請手動標記' : '尋找中…';
-          button.classList.remove('is-current');
-          return;
-        }
-        info.textContent = `第 ${key + 1} 格・${manual ? '你標記的' : rough ? 'AI 粗估' : 'AI 估計'}`;
-        button.classList.toggle('is-current', current === key);
-      };
-      show(btnJumpLift, liftInfo, sep ? sep.legLift : null, sep && sep.manualLift);
-      show(btnJumpFoot, footInfo, sep ? sep.foot : null, sep && sep.manualFoot);
-      show(btnJumpMer, merInfo, sep ? sep.mer : null, sep && sep.manualMer, sep && sep.merRough);
-      show(btnJumpRelease, releaseInfo, sep ? sep.release : null, sep && sep.manualRelease);
+      const done = trackComplete();
+      Object.entries(EVENT_DEFS).forEach(([id, def]) => {
+        const key = sep ? def.key(sep) : null;
+        const missing = key === null || key === undefined;
+        def.info.textContent = missing ? (done ? '沒找到' : '尋找中…') : `${sepKeyTime(key).toFixed(2)} 秒`;
+        def.button.classList.toggle('is-missing', missing && done);
+        def.button.classList.toggle('is-selected', id === selectedEvent);
+        def.button.setAttribute('aria-pressed', String(id === selectedEvent));
+      });
+      const def = EVENT_DEFS[selectedEvent];
+      const key = sep ? def.key(sep) : null;
+      let text, action = false;
+      if (!done || current === null) {
+        text = '分析完成後可以調整';
+      } else if (key === null || key === undefined) {
+        text = `找到「${def.name}」那一刻後，按這裡設定（${sepKeyTime(current).toFixed(2)} 秒）`;
+        action = true;
+      } else if (key === current) {
+        const source = def.manual(sep) ? '你設定的' : def.rough && def.rough(sep) ? 'AI 粗估' : 'AI 找的';
+        text = `✓ 正在看「${def.name}」（${source}）　不對就用 −1／+1 格調整`;
+      } else {
+        text = `把「${def.name}」改成這格（${sepKeyTime(current).toFixed(2)} 秒）`;
+        action = true;
+      }
+      if (btnSetKey.textContent !== text) btnSetKey.textContent = text;
+      btnSetKey.classList.toggle('is-action', action);
+      btnSetKey.setAttribute('aria-disabled', String(!action));
     }
 
     function renderStage() {
