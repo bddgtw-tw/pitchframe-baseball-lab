@@ -45,7 +45,7 @@ for (const performanceBehavior of [ 'if (!isPoseModelReady && !poseInitPromise) 
 for (const samplingBehavior of ['const ANALYSIS_SAMPLE_FPS = 8', 'sampledKeys: frames.map(frame => frame.index)', '個取樣點', 'fps: ANALYSIS_SAMPLE_FPS']) {
   if (!html.includes(samplingBehavior)) fail(`Bounded whole-video sampling is missing: ${samplingBehavior}`);
 }
-for (const eventSyncBehavior of ['function currentManualEventKey()', 'poseMatchesFrame() ? currentPoseStamp : frameStamp()', 'EVENT_DEFS[selectedEvent].set(currentManualEventKey())', 'sepCache = null; renderStage(); renderAnalysisCoverage()', 'function updateEventChips(sep)']) {
+for (const eventSyncBehavior of ['function currentManualEventKey()', 'poseMatchesFrame() ? currentPoseStamp : frameStamp()', 'EVENT_DEFS[selectedEvent].set(currentManualEventKey())', 'renderStage(); renderAnalysisCoverage()', 'function updateEventChips(sep)']) {
   if (!html.includes(eventSyncBehavior)) fail(`Manual event/frame synchronization is missing: ${eventSyncBehavior}`);
 }
 for (const blockingBehavior of ['src="./tailwind.js"', "addEventListener('DOMContentLoaded', initMediaPipe)", 'user-scalable=no', 'btnInstallApp', 'beforeinstallprompt', 'btnSmooth', 'blendCanvas', 'sessionSetup', 'btnPrev5', 'btnNext5', 'btnCapture', 'btnChoose', 'telemetryGrid', 'currentFrame: {', 'ctxHandedness', 'qualityFullBody', 'progressSection', 'pf-progress-history', 'athleteContext:', 'captureQuality:', 'comparison: {']) {

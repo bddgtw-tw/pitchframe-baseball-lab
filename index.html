@@ -92,7 +92,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     /* PitchFrame：一次只出現一個步驟（拍攝 → 分析 → 結果），手機直式優先 */
     :root {
       --bg: #0b131c; --surface: #111c28; --line: #253747; --text: #eef5f9; --muted: #9fb3c2;
-      --accent: #bef264; --accent-ink: #13200a; --warn: #fbbf24; --danger: #fb7185;
+      --confirm: #fb923c; --accent: #bef264; --accent-ink: #13200a; --warn: #fbbf24; --danger: #fb7185;
       --header-h: 56px;
       color-scheme: dark;
     }
@@ -215,17 +215,24 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     .hold-active { box-shadow: 0 0 0 2px var(--accent); }
     .section-label { margin: 20px 0 8px; font-size: 14px; font-weight: 700; color: var(--muted); }
     #keyFrames { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
-    .key-jump { min-height: 76px; padding: 8px 2px; border-radius: 12px; background: var(--surface); border: 2px solid var(--line);
+    /* 關鍵四格的三種狀態：AI 預選＝淡色虛線框；已確認＝橘色實線高亮；沒找到＝灰色虛線。白色外框＝正在看的那一格 */
+    .key-jump { min-height: 76px; padding: 8px 2px; border-radius: 12px; background: var(--surface); border: 2px dashed #3d5263;
       text-align: center; display: grid; gap: 2px; align-content: center; }
-    .key-jump.is-selected { border-color: var(--accent); background: rgba(190, 242, 100, .1); }
     .key-n { justify-self: center; width: 20px; height: 20px; border-radius: 10px; background: var(--line); font-size: 12px; line-height: 20px; font-weight: 700; }
-    .key-jump.is-selected .key-n { background: var(--accent); color: var(--accent-ink); }
     .key-name { font-size: 15px; font-weight: 800; }
-    .key-info { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
-    .key-jump.is-missing .key-info { color: #fbbf24; }
-    .key-set { margin-top: 8px; width: 100%; min-height: 48px; padding: 6px 12px; border-radius: 12px; font-size: 14px; color: var(--muted);
+    .key-info { font-size: 12px; color: var(--muted); }
+    .key-jump.is-confirmed { border: 2px solid var(--confirm); background: rgba(251, 146, 60, .16); }
+    .key-jump.is-confirmed .key-n { background: var(--confirm); color: #1c0f04; }
+    .key-jump.is-confirmed .key-info { color: var(--confirm); font-weight: 700; }
+    .key-jump.is-missing { opacity: .7; }
+    .key-jump.is-selected { outline: 2px solid var(--text); outline-offset: 2px; }
+    .key-set { margin-top: 10px; width: 100%; min-height: 48px; padding: 6px 12px; border-radius: 12px; font-size: 14px; color: var(--muted);
       border: 1px solid var(--line); line-height: 1.4; }
-    .key-set.is-action { color: var(--accent); border: 2px solid var(--accent); font-size: 15px; font-weight: 800; }
+    .key-set.is-action { background: var(--confirm); color: #1c0f04; border-color: var(--confirm); font-size: 15px; font-weight: 800; }
+    .key-legend { margin: 6px 0 0; font-size: 12px; color: var(--muted); text-align: center; }
+    .key-legend i { display: inline-block; width: 14px; height: 10px; border-radius: 3px; vertical-align: -1px; margin: 0 4px 0 10px; }
+    .key-legend .lg-ai { border: 2px dashed #3d5263; }
+    .key-legend .lg-ok { border: 2px solid var(--confirm); background: rgba(251, 146, 60, .3); }
     #resultActions { margin-top: 20px; }
     .more-links { margin-top: 12px; display: flex; flex-wrap: wrap; justify-content: center; gap: 0 18px; }
     .more-links button { min-height: 44px; font-size: 14px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
@@ -355,7 +362,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           <button id="btnJumpRelease" class="key-jump" type="button" data-event="release"><span class="key-n">4</span><span class="key-name">出手</span><span id="releaseInfo" class="key-info">尋找中…</span></button>
         </div>
         <!-- 只有一顆設定按鈕：按鈕上寫出會改哪一格、改成幾秒 -->
-        <button id="btnSetKey" class="key-set" type="button" aria-live="polite">分析完成後可以調整</button>
+        <button id="btnSetKey" class="key-set" type="button" aria-live="polite">分析完成後可以確認</button>
+        <p class="key-legend"><i class="lg-ai"></i>AI 預選<i class="lg-ok"></i>已確認（會放進結果圖）</p>
         <p id="analysisCoverage" class="note warn hidden" aria-live="polite"></p>
 
         <div id="resultActions">
@@ -1820,37 +1828,52 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (!video.videoWidth || !btnSetKey.classList.contains('is-action')) return;
       if (isPlaying) pauseVideo(false, false);
       EVENT_DEFS[selectedEvent].set(currentManualEventKey());
-      sepCache = null; renderStage(); renderAnalysisCoverage();
+      sepCache = null;
+      // 確認後自動跳到下一個還沒確認的格子，四格一路按下去就完成
+      const s = getSeparation(), order = Object.keys(EVENT_DEFS);
+      const start = order.indexOf(selectedEvent);
+      for (let i = 1; i < order.length; i++) {
+        const id = order[(start + i) % order.length], d = EVENT_DEFS[id];
+        if (s && d.manual(s)) continue;
+        selectedEvent = id;
+        const k = s ? d.key(s) : null;
+        if (k !== null && k !== undefined) jumpToKey(k);
+        break;
+      }
+      renderStage(); renderAnalysisCoverage();
     });
     function updateEventChips(sep) {
       const current = video.videoWidth ? currentManualEventKey() : null;
       const done = trackComplete();
+      let confirmed = 0;
       Object.entries(EVENT_DEFS).forEach(([id, def]) => {
         const key = sep ? def.key(sep) : null;
         const missing = key === null || key === undefined;
-        def.info.textContent = missing ? (done ? '沒找到' : '尋找中…') : `${sepKeyTime(key).toFixed(2)} 秒`;
+        const ok = !missing && !!(sep && def.manual(sep));
+        if (ok) confirmed++;
+        def.info.textContent = missing ? (done ? '沒找到' : '尋找中…') : ok ? '✓ 已確認' : 'AI 預選';
         def.button.classList.toggle('is-missing', missing && done);
+        def.button.classList.toggle('is-confirmed', ok);
         def.button.classList.toggle('is-selected', id === selectedEvent);
         def.button.setAttribute('aria-pressed', String(id === selectedEvent));
       });
       const def = EVENT_DEFS[selectedEvent];
       const key = sep ? def.key(sep) : null;
+      const ok = key !== null && key !== undefined && !!(sep && def.manual(sep));
+      const t = current === null ? '' : `${sepKeyTime(current).toFixed(2)} 秒`;
       let text, action = false;
-      if (!done || current === null) {
-        text = '分析完成後可以調整';
-      } else if (key === null || key === undefined) {
-        text = `找到「${def.name}」那一刻後，按這裡設定（${sepKeyTime(current).toFixed(2)} 秒）`;
-        action = true;
-      } else if (key === current) {
-        const source = def.manual(sep) ? '你設定的' : def.rough && def.rough(sep) ? 'AI 粗估' : 'AI 找的';
-        text = `✓ 正在看「${def.name}」（${source}）　不對就用 −1／+1 格調整`;
-      } else {
-        text = `把「${def.name}」改成這格（${sepKeyTime(current).toFixed(2)} 秒）`;
-        action = true;
-      }
+      if (!done || current === null) text = '分析完成後可以確認';
+      else if (key === null || key === undefined) { text = `找到「${def.name}」那一刻後，按這裡確認（${t}）`; action = true; }
+      else if (key !== current) { text = `把「${def.name}」改成這格並確認（${t}）`; action = true; }
+      else if (!ok) { text = `✓ 確認這格是「${def.name}」`; action = true; }
+      else text = `已確認「${def.name}」　不對就用 −1／+1 格移到對的那格`;
       if (btnSetKey.textContent !== text) btnSetKey.textContent = text;
       btnSetKey.classList.toggle('is-action', action);
       btnSetKey.setAttribute('aria-disabled', String(!action));
+      if (!btnShareResult.disabled) {
+        const label = done ? `分享結果圖給教練（已確認 ${confirmed}／4）` : '分享結果圖給教練';
+        if (btnShareResultText.textContent !== label) btnShareResultText.textContent = label;
+      }
     }
 
     function renderStage() {
@@ -2811,10 +2834,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     async function buildResultImage() {
       const sep = getSeparation();
       const items = [];
-      if (sep && sep.legLift !== null) items.push({ key: sep.legLift, name: '抬腿最高點', manual: sep.manualLift });
-      if (sep && sep.foot !== null) items.push({ key: sep.foot, name: '前腳落地', manual: sep.manualFoot });
-      if (sep && sep.mer !== null) items.push({ key: sep.mer, name: '最大外旋', manual: sep.manualMer, rough: sep.merRough });
-      if (sep && sep.release !== null) items.push({ key: sep.release, name: '出手', manual: sep.manualRelease });
+      // 結果圖只放家長已確認的格子；AI 預選的不放
+      if (sep && sep.legLift !== null && sep.manualLift) items.push({ key: sep.legLift, name: '抬腿最高點', manual: true });
+      if (sep && sep.foot !== null && sep.manualFoot) items.push({ key: sep.foot, name: '前腳落地', manual: true });
+      if (sep && sep.mer !== null && sep.manualMer) items.push({ key: sep.mer, name: '最大外旋', manual: true });
+      if (sep && sep.release !== null && sep.manualRelease) items.push({ key: sep.release, name: '出手', manual: true });
       if (!items.length) items.push({ key: currentManualEventKey(), name: '目前畫面', manual: null });
       const aspect = viewAspect();
       // 1–2 格：直式影片並排、橫式上下排；3–4 格一律排成 2×2，LINE 預覽時每格仍夠大。
@@ -2852,6 +2876,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     btnShareResult.addEventListener('click', async () => {
       if (!video.videoWidth || !currentVideoObjectUrl) return;
       if (analysisActive() || isExportingVideo) { aiHandoffStatus.textContent = '分析完成後再分享。'; return; }
+      const sepNow = getSeparation();
+      if (!sepNow || !(sepNow.manualLift || sepNow.manualFoot || sepNow.manualMer || sepNow.manualRelease)) {
+        aiHandoffStatus.textContent = '請先確認至少一格：點上面的格子，按橘色按鈕確認。';
+        return;
+      }
       if (isPlaying) pauseVideo(false, false);
       btnShareResult.disabled = true;
       btnShareResultText.textContent = '製作結果圖…';
