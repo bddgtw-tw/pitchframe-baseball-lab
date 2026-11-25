@@ -232,6 +232,15 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       background: rgba(0, 0, 0, .8); }
     .modal-card { width: 100%; max-width: 360px; padding: 24px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); text-align: center; }
     .modal-card h3 { margin: 0 0 4px; font-size: 17px; }
+    #aiSummaryModal { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 16px;
+      background: rgba(0, 0, 0, .8); }
+    #aiSummaryModal.hidden { display: none; }
+    .ai-card { max-width: 560px; max-height: calc(100svh - 32px); display: flex; flex-direction: column; gap: 10px; text-align: left; padding: 18px; }
+    .ai-hint { margin: 0; font-size: 13px; color: var(--muted); }
+    #aiSummaryText { flex: 1 1 auto; min-height: 180px; height: 50svh; width: 100%; resize: none; padding: 10px; border-radius: 10px;
+      background: var(--bg); color: var(--text); border: 1px solid var(--line); font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .ai-card .hint { margin: 0; min-height: 1.2em; text-align: center; }
+    #btnCloseAISummary { min-height: 44px; color: var(--muted); }
     #exportFormatNotice { margin: 0 0 16px; font-size: 13px; color: var(--muted); }
     .bar { height: 8px; border-radius: 8px; overflow: hidden; background: #1e2d3b; }
     #exportProgressBar { height: 100%; width: 0; background: var(--accent); transition: width .1s; }
@@ -368,6 +377,17 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       </div>
     </section>
   </main>
+
+  <div id="aiSummaryModal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="aiSummaryTitle">
+    <div class="modal-card ai-card">
+      <h3 id="aiSummaryTitle">給 AI 的文字摘要</h3>
+      <p class="ai-hint">複製後貼到 ChatGPT、Claude 等 AI 對話，再附上結果圖。不含影片。</p>
+      <textarea id="aiSummaryText" readonly spellcheck="false" aria-label="文字摘要全文"></textarea>
+      <button id="btnCopyAISummary" class="btn primary" type="button">複製全文</button>
+      <p id="aiCopyStatus" class="hint" aria-live="polite"></p>
+      <button id="btnCloseAISummary" type="button">關閉</button>
+    </div>
+  </div>
 
   <div id="exportModal" class="hidden" role="dialog" aria-label="正在製作骨架影片">
     <div class="modal-card">
@@ -2690,15 +2710,16 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const eventSourceLabel = source => source === 'manual' ? '人工確認' : source === 'automatic-estimate' ? '系統估計，請人工確認'
         : source === 'rough-time-estimate' ? '依出手時間粗估，請逐格確認' : '未確認';
       const timeLabel = value => Number.isFinite(value) ? `${value.toFixed(3)} 秒` : '未確認';
+      const eventLabel = (seconds, source) => Number.isFinite(seconds) ? `${timeLabel(seconds)}（${eventSourceLabel(source)}）` : '未確認';
       const readinessLabel = poseCoverage.readyForAutomatedSummary
         ? '骨架覆蓋與關鍵事件達到目前的摘要門檻；仍需教練查看原始畫面。'
         : '資料尚未達到摘要門檻；請先確認落地／出手或重拍清楚影片。';
       const coveragePercent = poseCoverage.detectedRatio === null ? null : Math.round(poseCoverage.detectedRatio * 100);
       const coachSummary = `## 給教練的快速摘要\n\n` +
-        `- 抬腿最高點：${timeLabel(data.estimatedEvents.legLiftPeakSeconds)}（${eventSourceLabel(data.estimatedEvents.legLiftPeakSource)}）\n` +
-        `- 前腳落地：${timeLabel(data.estimatedEvents.footStrikeSeconds)}（${eventSourceLabel(data.estimatedEvents.footStrikeSource)}）\n` +
-        `- 最大外旋（只標時間點，不是角度）：${timeLabel(data.estimatedEvents.maxExternalRotationSeconds)}（${eventSourceLabel(data.estimatedEvents.maxExternalRotationSource)}）\n` +
-        `- 出手：${timeLabel(data.estimatedEvents.ballReleaseSeconds)}（${eventSourceLabel(data.estimatedEvents.ballReleaseSource)}）\n` +
+        `- 抬腿最高點：${eventLabel(data.estimatedEvents.legLiftPeakSeconds, data.estimatedEvents.legLiftPeakSource)}\n` +
+        `- 前腳落地：${eventLabel(data.estimatedEvents.footStrikeSeconds, data.estimatedEvents.footStrikeSource)}\n` +
+        `- 最大外旋（只標時間點，不是角度）：${eventLabel(data.estimatedEvents.maxExternalRotationSeconds, data.estimatedEvents.maxExternalRotationSource)}\n` +
+        `- 出手：${eventLabel(data.estimatedEvents.ballReleaseSeconds, data.estimatedEvents.ballReleaseSource)}\n` +
         `- 落地到出手：${Number.isFinite(phaseMilliseconds) ? `${phaseMilliseconds} 毫秒` : '資料不足'}\n` +
         `- 骨架覆蓋：${poseCoverage.analyzedFrames ? `${coveragePercent}%（${poseCoverage.detectedFrames}/${poseCoverage.analyzedFrames} 個取樣點）` : '尚無完整分析'}\n` +
         `- 單機位旋轉差觀察：${separationObservation}（不是角度、分數、球速、動力傳遞效率或傷害風險）\n` +
@@ -2723,36 +2744,40 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
-    btnShareAI.addEventListener('click', async () => {
+    // 給 AI 的文字摘要：直接在畫面上顯示全文，一鍵複製後貼到 ChatGPT、Claude 等 AI 對話
+    const aiSummaryModal = document.getElementById('aiSummaryModal');
+    const aiSummaryText = document.getElementById('aiSummaryText');
+    const btnCopyAISummary = document.getElementById('btnCopyAISummary');
+    const aiCopyStatus = document.getElementById('aiCopyStatus');
+    function closeAISummary() { aiSummaryModal.classList.add('hidden'); document.body.style.overflow = ''; btnShareAI.focus(); }
+    btnShareAI.addEventListener('click', () => {
       if (!video.videoWidth) { alert('請先載入並分析一段投球影片。'); return; }
-      const content = aiAnalysisPackage();
-      const fileName = `PitchFrame_教練AI分析包_${new Date().toISOString().slice(0, 10)}.md`;
-      btnShareAI.disabled = true;
-      btnShareAIText.textContent = '準備分享…';
-      aiHandoffStatus.textContent = '';
-      try {
-        const file = new File([content], fileName, { type: 'text/markdown;charset=utf-8' });
-        if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({ title: 'PitchFrame 教練／AI 分析包', text: '內含教練快速摘要、資料品質與限制；請查看關鍵畫面後再提供建議。', files: [file] });
-          aiHandoffStatus.textContent = '已開啟分享選單，傳給誰由你決定。';
-        } else if (navigator.clipboard && window.isSecureContext) {
-          await navigator.clipboard.writeText(content);
-          aiHandoffStatus.textContent = '文字摘要已複製，可直接貼到 AI 對話。';
-        } else {
-          downloadBlob(new Blob([content], { type: 'text/markdown;charset=utf-8' }), fileName);
-          aiHandoffStatus.textContent = '文字摘要已下載。';
-        }
-      } catch (err) {
-        if (err && err.name === 'AbortError') aiHandoffStatus.textContent = '已取消，資料沒有傳出。';
-        else {
-          downloadBlob(new Blob([content], { type: 'text/markdown;charset=utf-8' }), fileName);
-          aiHandoffStatus.textContent = '無法直接分享，已改為下載文字摘要。';
-        }
-      } finally {
-        btnShareAI.disabled = false;
-        btnShareAIText.textContent = '給 AI 的文字摘要';
-      }
+      if (isPlaying) pauseVideo(false, false);
+      aiSummaryText.value = aiAnalysisPackage();
+      aiCopyStatus.textContent = '';
+      btnCopyAISummary.textContent = '複製全文';
+      aiSummaryModal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+      aiSummaryText.scrollTop = 0;
+      btnCopyAISummary.focus();
     });
+    btnCopyAISummary.addEventListener('click', async () => {
+      const content = aiSummaryText.value;
+      let copied = false;
+      try {
+        if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(content); copied = true; }
+      } catch (_) { /* 改用選取後複製 */ }
+      if (!copied) {
+        aiSummaryText.focus();
+        aiSummaryText.setSelectionRange(0, content.length);
+        try { copied = document.execCommand('copy'); } catch (_) { copied = false; }
+      }
+      btnCopyAISummary.textContent = copied ? '已複製 ✓' : '複製全文';
+      aiCopyStatus.textContent = copied ? '貼到 AI 對話裡，再附上結果圖就可以問了。' : '無法自動複製，文字已全選，請長按後選「拷貝」。';
+    });
+    document.getElementById('btnCloseAISummary').addEventListener('click', closeAISummary);
+    aiSummaryModal.addEventListener('click', (e) => { if (e.target === aiSummaryModal) closeAISummary(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !aiSummaryModal.classList.contains('hidden')) closeAISummary(); });
 
     /* 結果圖：抬腿最高點、前腳落地、最大外旋、出手排成一張，畫上骨架與角度，一張圖就能傳給教練。
        用隱藏的分析用影片解碼關鍵格，不打斷主畫面。沒有骨架的格子只畫原畫面，不捏造。 */
