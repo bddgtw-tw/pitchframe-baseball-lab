@@ -684,6 +684,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     const poseCache = new Map();
     const worldCache = new Map(); // 同一格的 MediaPipe 3D 座標（公尺、以髖為中心），供髖肩分離推估
     let lastCropWorld = null;
+    // 家長按「確認」那一刻畫面上的那一格（整張原解析度）。結果圖直接用它，保證每格就是家長看過、確認過的畫面。
+    const keyShots = new Map();
     let lastValidLandmarks = null;
     let lastValidTime = 0;
 
@@ -799,6 +801,33 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const done = waitForMediaEvent(analysisVideo, 'seeked', 8000, '影格解碼逾時');
       analysisVideo.currentTime = time;
       return done;
+    }
+    // 有些手機瀏覽器 seeked 之後，隱藏影片的畫面還停在上一格。等新畫面真的出來（最多 0.4 秒）。
+    function waitPresented(media, ms) {
+      if (typeof media.requestVideoFrameCallback !== 'function') return new Promise(r => setTimeout(r, Math.min(ms, 60)));
+      return new Promise(resolve => {
+        const timer = setTimeout(resolve, ms);
+        media.requestVideoFrameCallback(() => { clearTimeout(timer); resolve(); });
+      });
+    }
+    const printCanvas = document.createElement('canvas');
+    printCanvas.width = 16; printCanvas.height = 16;
+    const printCtx = printCanvas.getContext('2d', { willReadFrequently: true });
+    function framePrint(media) {
+      try {
+        printCtx.drawImage(media, 0, 0, 16, 16);
+        return printCtx.getImageData(0, 0, 16, 16).data.join(',');
+      } catch (_) { return null; }
+    }
+    let lastAnalysisPrint = null;
+    async function seekAnalysisFresh(time) {
+      await seekAnalysisVideo(time);
+      let print = framePrint(analysisVideo);
+      if (print && print === lastAnalysisPrint) {
+        await waitPresented(analysisVideo, 400);
+        print = framePrint(analysisVideo);
+      }
+      lastAnalysisPrint = print;
     }
 
     // 進度條：亮綠色＝已分析的範圍（點選球員後是從那一格往前後展開，不一定從 0 開始）
@@ -1012,6 +1041,52 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (n < 6) return null;
       return { x0, y0, x1, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, size: Math.max(x1 - x0, y1 - y0) };
     }
+    // 選了孩子之後，單格辨識（逐格看、確認、匯出影片）也只看孩子附近，不再看整張畫面：
+    // 整張畫面時 AI 會抓到背景裡比較清楚的人（例如內野手）。範圍取前後最近、已分析到骨架的格子；都沒有就用家長的框。
+    function targetCropAt(time) {
+      if (!hasTargetChoice() || targetChoice.mode !== 'point' || !video.videoWidth) return null;
+      const W = video.videoWidth, H = video.videoHeight;
+      let before = null, after = null;
+      for (const [k, lm] of poseCache) {
+        if (!lm) continue;
+        const d = sepKeyTime(k) - time;
+        if (Math.abs(d) > 0.6 || Math.abs(d) < 0.000001) continue;
+        if (d < 0 && (!before || d > before.d)) before = { d, lm };
+        if (d > 0 && (!after || d < after.d)) after = { d, lm };
+      }
+      const bounds = [before, after].map(n => n && landmarkBounds(n.lm, W, H)).filter(Boolean);
+      const maxSide = Math.max(W, H) * 1.3, minSide = Math.min(W, H) * 0.12;
+      if (bounds.length) {
+        const x0 = Math.min(...bounds.map(b => b.x0)), x1 = Math.max(...bounds.map(b => b.x1));
+        const y0 = Math.min(...bounds.map(b => b.y0)), y1 = Math.max(...bounds.map(b => b.y1));
+        const size = Math.max(x1 - x0, y1 - y0);
+        return { cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, side: Math.min(maxSide, Math.max(size * 1.6, minSide)), W, H };
+      }
+      const bx = targetChoice.box;
+      if (!bx) return null;
+      return { cx: (bx.x + bx.w / 2) * W, cy: (bx.y + bx.h / 2) * H, side: Math.min(maxSide, Math.max(bx.w * W, bx.h * H)), W, H };
+    }
+    // 把 crop 範圍畫進正方形畫布送給 AI；source 可以是影片或縮小過的快照畫布
+    function drawCropInput(source, crop, canvas, ctx) {
+      if (canvas.width !== CROP_EDGE || canvas.height !== CROP_EDGE) { canvas.width = CROP_EDGE; canvas.height = CROP_EDGE; }
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, CROP_EDGE, CROP_EDGE);
+      const { W, H, side } = crop, sx = crop.cx - side / 2, sy = crop.cy - side / 2;
+      const f = (source.videoWidth || source.width) / W; // 來源像素 / 影片像素
+      const ix0 = Math.max(0, sx), iy0 = Math.max(0, sy), ix1 = Math.min(W, sx + side), iy1 = Math.min(H, sy + side);
+      if (ix1 <= ix0 || iy1 <= iy0) return;
+      const k = CROP_EDGE / side;
+      ctx.drawImage(source, ix0 * f, iy0 * f, (ix1 - ix0) * f, (iy1 - iy0) * f, (ix0 - sx) * k, (iy0 - sy) * k, (ix1 - ix0) * k, (iy1 - iy0) * k);
+    }
+    // crop 裡的結果換回整張影片 0..1 座標；結果離 crop 中心太遠（跳到別人身上）就不採用
+    function landmarksFromCrop(raw, crop) {
+      if (!raw || raw.length < 25) return null;
+      const { W, H, side } = crop, sx = crop.cx - side / 2, sy = crop.cy - side / 2;
+      const lm = raw.map(p => ({ ...p, x: (sx + p.x * side) / W, y: (sy + p.y * side) / H }));
+      const b = landmarkBounds(lm, W, H);
+      if (!b || Math.hypot(b.cx - crop.cx, b.cy - crop.cy) > side * 0.6) return null;
+      return lm;
+    }
+
     // 平滑濾波（One Euro）：靜止時去抖動、快速動作時幾乎不延遲；在整張影片的像素座標上做
     function makeOneEuro(minCutoff = 1.7, beta = 0.005, dCutoff = 1.0) {
       let prev = null, dPrev = 0;
@@ -1054,6 +1129,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         }
         await ensureAnalysisVideo(url);
         if (stale()) return;
+        lastAnalysisPrint = null;
         const W = analysisVideo.videoWidth || 1, H = analysisVideo.videoHeight || 1;
         modelSourceGeneration = source;
         const store = (item, landmarks, world = null) => {
@@ -1077,7 +1153,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           reportAnalysisProgress(job);
           for (let i = 0; i < n; i++) {
             if (stale()) return;
-            await seekAnalysisVideo(frames[i].seekTime);
+            await seekAnalysisFresh(frames[i].seekTime);
             if (stale()) return;
             analysisCtx.drawImage(analysisVideo, 0, 0, analysisCanvas.width, analysisCanvas.height);
             const res = await sendAndWait(engine, analysisCanvas);
@@ -1093,7 +1169,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
           let i0 = 0, best = Infinity;
           frames.forEach((f, i) => { const d = Math.abs(f.seekTime - choice.time); if (d < best) { best = d; i0 = i; } });
           const tapX = choice.nx * W, tapY = choice.ny * H, maxSide = Math.max(W, H) * 1.3;
-          await seekAnalysisVideo(frames[i0].seekTime);
+          await seekAnalysisFresh(frames[i0].seekTime);
           if (stale()) return;
           // 1) 先看整個框裡的人；找不到再在框中心試幾種裁切大小，找出「身體範圍包含點擊位置」的那個人
           let seed = null;
@@ -1133,7 +1209,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
             let smooth = makeLandmarkSmoother(W, H);
             for (const i of order) {
               if (stale()) return false;
-              await seekAnalysisVideo(frames[i].seekTime);
+              await seekAnalysisFresh(frames[i].seekTime);
               if (stale()) return false;
               let lm = await inferCrop(engine, box);
               if (stale()) return false;
@@ -1318,10 +1394,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const curTime = activePoseJob.time;
       const frameKey = getPoseCacheKey(curTime);
 
-      if (results.poseLandmarks && results.poseLandmarks.length >= 25) {
+      const found = activePoseJob.crop ? landmarksFromCrop(results.poseLandmarks, activePoseJob.crop)
+        : (results.poseLandmarks && results.poseLandmarks.length >= 25 ? results.poseLandmarks : null);
+      if (found) {
         // 成功辨識出人體
         hasEverDetectedRealPerson = true;
-        currentLandmarks = results.poseLandmarks;
+        currentLandmarks = found;
         isCurrentLandmarkEstimated = false;
         lastValidLandmarks = currentLandmarks;
         lastValidTime = curTime;
@@ -1377,8 +1455,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (pairedPlaybackActive()) { activePoseJob.playPairGeneration=playPairGeneration; activePoseJob.playback=playbackGeneration; }
       const inputWidth = video.videoWidth, inputHeight = video.videoHeight;
       const scale = Math.min(1, INFERENCE_MAX_EDGE / Math.max(inputWidth,inputHeight));
-      inferenceCanvas.width = Math.max(1, Math.round(inputWidth * scale));
-      inferenceCanvas.height = Math.max(1, Math.round(inputHeight * scale));
+      const crop = targetCropAt(stamp.time);
+      activePoseJob.crop = crop;
+      if (!crop) {
+        inferenceCanvas.width = Math.max(1, Math.round(inputWidth * scale));
+        inferenceCanvas.height = Math.max(1, Math.round(inputHeight * scale));
+      }
       try {
         if (modelSourceGeneration !== sourceGeneration) {
           await withPoseTimeout(Promise.resolve(engine.reset()), 10000, '模型重設逾時');
@@ -1388,7 +1470,12 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         activePoseJob.time = stamp.time;
         activePoseJob.snapshot = (scrubSession || activePoseJob.playPairGeneration !== undefined) ? captureDecodedFrame() : null;
         const input = activePoseJob.snapshot || video;
-        inferenceCtx.drawImage(input, 0, 0, inferenceCanvas.width, inferenceCanvas.height);
+        if (crop) {
+          // 跳格辨識：先清掉模型的追蹤記憶，避免沿用別格、別人的位置
+          await withPoseTimeout(Promise.resolve(engine.reset()), 10000, '模型重設逾時');
+          if (!activePoseJob || !sameFrame(stamp, frameStamp())) return;
+          drawCropInput(input, crop, inferenceCanvas, inferenceCtx);
+        } else inferenceCtx.drawImage(input, 0, 0, inferenceCanvas.width, inferenceCanvas.height);
         reportPoseStatus('正在辨識影格', `辨識 ${activePoseJob.time.toFixed(3)} 秒中；只顯示與目前影格一致的結果；骨架播放以已完成的畫面與骨架成對更新，可能略過中間影格；原音訊不變。`);
         await withPoseTimeout(engine.send({ image: inferenceCanvas }), 30000, '影格辨識超過 30 秒，可能是 WebGL／模型載入失敗');
         if (epoch === poseEpoch && activePoseJob && activePoseJob.source === sourceGeneration && !activePoseJob.received) {
@@ -1662,6 +1749,14 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     function pixelAspect() {
       return { w: video.videoWidth || 1, h: video.videoHeight || 1 };
     }
+    // 軀幹傾角：髖中點→肩中點 與垂直線的夾角（正值＝肩膀在畫面右側）。畫面標籤與 AI 摘要都用這一個。
+    function trunkTiltDegrees(lm) {
+      if (!lm || ![lm[11], lm[12], lm[23], lm[24]].every(credibleBodyPoint)) return null;
+      const { w, h } = pixelAspect();
+      const dx = ((lm[11].x + lm[12].x) - (lm[23].x + lm[24].x)) / 2 * w;
+      const dy = ((lm[11].y + lm[12].y) - (lm[23].y + lm[24].y)) / 2 * h;
+      return Math.round(Math.atan2(dx, -dy) * 180 / Math.PI);
+    }
     function calculateAngle(a, b, c) {
       if (![a,b,c].every(credibleBodyPoint)) return null;
       const { w, h } = pixelAspect();
@@ -1709,7 +1804,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     // 先跳到出手前約 0.03 秒當起點，標示為「粗估」，由家長逐格調整。
     const MER_BEFORE_RELEASE_SECONDS = 0.03;
 
-    function resetSeparation() { sepCache = null; manualLift = null; manualFoot = null; manualMer = null; manualRelease = null; }
+    function resetSeparation() { keyShots.clear(); sepCache = null; manualLift = null; manualFoot = null; manualMer = null; manualRelease = null; }
     const v3 = {
       sub: (a, b) => [a.x - b.x, a.y - b.y, a.z - b.z],
       mid: (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, z: (a.z + b.z) / 2 }),
@@ -1818,6 +1913,17 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (key !== null && key !== undefined) jumpToKey(key);
       else { if (isPlaying) pauseVideo(false, false); renderStage(); }
     }));
+    function captureKeyShot(key) {
+      const stamp = frameStamp();
+      if (!stamp || !video.videoWidth || getPoseCacheKey(stamp.time) !== key) return;
+      const shot = keyShots.get(key) || document.createElement('canvas');
+      shot.width = video.videoWidth; shot.height = video.videoHeight;
+      shot.getContext('2d').drawImage(video, 0, 0, shot.width, shot.height);
+      keyShots.set(key, shot);
+      // 只留目前四個已確認格子的畫面
+      const keep = new Set([manualLift, manualFoot, manualMer, manualRelease]);
+      for (const k of [...keyShots.keys()]) if (!keep.has(k)) keyShots.delete(k);
+    }
     function currentManualEventKey() {
       // Prefer the exact decoded frame that produced the visible skeleton. video.currentTime can
       // differ slightly from requestVideoFrameCallback mediaTime and otherwise point at a cache miss.
@@ -1829,6 +1935,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       if (isPlaying) pauseVideo(false, false);
       EVENT_DEFS[selectedEvent].set(currentManualEventKey());
       sepCache = null;
+      captureKeyShot(currentManualEventKey());
       // 確認後自動跳到下一個還沒確認的格子，四格一路按下去就完成
       const s = getSeparation(), order = Object.keys(EVENT_DEFS);
       const start = order.indexOf(selectedEvent);
@@ -2235,15 +2342,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const leftKneeAngle = calculateAngle(lm[23], lm[25], lm[27]);
       const rightKneeAngle = calculateAngle(lm[24], lm[26], lm[28]);
 
-      let trunkTiltAngle = null;
-      if (midShoulder && pelvisCenter) {
-        const { w: aspectW, h: aspectH } = pixelAspect();
-        const dx = (midShoulder.x - pelvisCenter.x) * aspectW;
-        const dy = (midShoulder.y - pelvisCenter.y) * aspectH;
-        // 計算與垂直線 (0, -1) 的夾角
-        const rad = Math.atan2(dx, -dy);
-        trunkTiltAngle = Math.round(rad * 180 / Math.PI);
-      }
+      const trunkTiltAngle = trunkTiltDegrees(lm);
 
       // I. 穩定四周固定區角度標記（以平滑包圍盒與死區鎖定標籤位置，不隨關節微震跳動，並以「斜-平」引線連接）
       const bodyPts = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]
@@ -2651,15 +2750,11 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     function frameMetricsAtKey(key) {
       const lm = key === null || key === undefined ? null : poseCache.get(key);
       if (!lm || lm.length < 29) return null;
-      let trunkTilt = null;
-      if ([lm[11], lm[12], lm[23], lm[24]].every(credibleBodyPoint)) {
-        const shoulder = { x: (lm[11].x + lm[12].x) / 2, y: (lm[11].y + lm[12].y) / 2 };
-        const hip = { x: (lm[23].x + lm[24].x) / 2, y: (lm[23].y + lm[24].y) / 2 };
-        const { w, h } = pixelAspect();
-        trunkTilt = Math.round(Math.atan2((shoulder.x - hip.x) * w, -(shoulder.y - hip.y) * h) * 180 / Math.PI);
-      }
+      const trunkTilt = trunkTiltDegrees(lm);
       return {
-        trunkTiltDegrees: trunkTilt,
+        // 與結果圖上的「軀幹傾角」同一個數字；方向另外標，避免正負號和圖對不起來
+        trunkTiltDegrees: trunkTilt === null ? null : Math.abs(trunkTilt),
+        trunkTiltTowardImageSide: trunkTilt === null ? null : trunkTilt > 0 ? 'right' : trunkTilt < 0 ? 'left' : 'upright',
         leftElbowDegrees: calculateAngle(lm[11], lm[13], lm[15]),
         rightElbowDegrees: calculateAngle(lm[12], lm[14], lm[16]),
         leftKneeDegrees: calculateAngle(lm[23], lm[25], lm[27]),
@@ -2808,16 +2903,23 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
        用隱藏的分析用影片解碼關鍵格，不打斷主畫面。沒有骨架的格子只畫原畫面，不捏造。 */
     async function decodeAnalysisFrame(time) {
       await ensureAnalysisVideo(currentVideoObjectUrl, '影片載入逾時');
-      if (Math.abs(analysisVideo.currentTime - time) > 0.000001 || analysisVideo.readyState < 2) await seekAnalysisVideo(time);
+      if (Math.abs(analysisVideo.currentTime - time) > 0.000001 || analysisVideo.readyState < 2) {
+        await seekAnalysisVideo(time);
+        await waitPresented(analysisVideo, 400);
+      }
     }
     async function renderKeyPanel(key, width, height) {
       const panel = document.createElement('canvas');
       panel.width = width; panel.height = height;
       const ctx = panel.getContext('2d');
       ctx.fillStyle = '#000'; ctx.fillRect(0, 0, width, height);
-      await decodeAnalysisFrame(sepKeyTime(key));
       const b = getRenderBounds(panel);
-      ctx.drawImage(analysisVideo, b.destX, b.destY, b.destW, b.destH);
+      const shot = keyShots.get(key);
+      if (shot) ctx.drawImage(shot, b.destX, b.destY, b.destW, b.destH);
+      else {
+        await decodeAnalysisFrame(sepKeyTime(key));
+        ctx.drawImage(analysisVideo, b.destX, b.destY, b.destW, b.destH);
+      }
       const lm = poseCache.get(key);
       if (showSkeleton && lm && lm.length >= 25) {
         // 骨架畫在較小的透明圖層再放大，線條與角度字在手機上看得清楚，影片本身保持原解析度
@@ -2983,11 +3085,16 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
 
       const inputWidth = video.videoWidth;
       const inputHeight = video.videoHeight;
-      const scale = Math.min(1, INFERENCE_MAX_EDGE / Math.max(inputWidth, inputHeight));
-      inferenceCanvas.width = Math.max(1, Math.round(inputWidth * scale));
-      inferenceCanvas.height = Math.max(1, Math.round(inputHeight * scale));
-
-      inferenceCtx.drawImage(video, 0, 0, inferenceCanvas.width, inferenceCanvas.height);
+      const crop = targetCropAt(video.currentTime);
+      if (crop) {
+        await withPoseTimeout(Promise.resolve(pose.reset()), 10000, '模型重設逾時');
+        drawCropInput(video, crop, inferenceCanvas, inferenceCtx);
+      } else {
+        const scale = Math.min(1, INFERENCE_MAX_EDGE / Math.max(inputWidth, inputHeight));
+        inferenceCanvas.width = Math.max(1, Math.round(inputWidth * scale));
+        inferenceCanvas.height = Math.max(1, Math.round(inputHeight * scale));
+        inferenceCtx.drawImage(video, 0, 0, inferenceCanvas.width, inferenceCanvas.height);
+      }
 
       const resultPromise = new Promise(resolve => {
         exportPoseResolver = resolve;
@@ -2996,7 +3103,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       const results = await resultPromise;
       if (signal && signal.aborted) throw new Error('EXPORT_CANCELLED');
       if (!results || !results.poseLandmarks || results.poseLandmarks.length < 25) return null;
-
+      if (crop) return landmarksFromCrop(results.poseLandmarks, crop);
       return results.poseLandmarks.map(p => ({ ...p }));
     }
 
