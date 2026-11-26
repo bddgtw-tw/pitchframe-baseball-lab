@@ -55,6 +55,10 @@ for (const blockingBehavior of ['src="./tailwind.js"', "addEventListener('DOMCon
 for (const removedUi of ['pitchframe.css', 'tailwind', 'drawCanvas', 'annotationToolbar', 'sepTintCanvas', 'sepStrip', 'sepPanel', 'viewSettings', 'btnLoop', 'btnResetEvents', 'btnExportPNG', 'moreExports', 'parentGuide']) {
   if (html.includes(removedUi)) fail(`Removed UI came back: ${removedUi}`);
 }
+// Ben's shoulder-hip quadrilateral: fill depth only, relative to the starting posture, never an angle or score.
+for (const quadBehavior of ['function shoulderHipQuadLevel(lm)', 'quad-legend', '不是角度或分數']) {
+  if (!html.includes(quadBehavior)) fail(`Shoulder-hip quadrilateral is missing: ${quadBehavior}`);
+}
 for (const scienceGuard of ['single-camera 2D cannot measure shoulder external rotation angle', '不是評分或醫療判斷', '不得解讀為越大越好', 'pitchframe-analysis-package-v2', 'validatedPhysicalMeasurement: false']) {
   if (!html.includes(scienceGuard)) fail(`Sports-science safeguard is missing: ${scienceGuard}`);
 }
