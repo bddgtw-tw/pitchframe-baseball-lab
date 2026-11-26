@@ -476,6 +476,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     let pose = null;
     let isPoseModelReady = false;
     const POSE_BASE = './';
+    let lastCropInfer = null; // 播放時上一格 crop 辨識的時間，用來判斷能否沿用追蹤
     let poseInitPromise = null, poseEpoch = 0, sourceGeneration = 0;
     let activePoseJob = null, pendingPoseFrame = false, lastSentFrame = null;
     let modelSourceGeneration = -1;
@@ -1475,9 +1476,15 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         activePoseJob.snapshot = (scrubSession || activePoseJob.playPairGeneration !== undefined) ? captureDecodedFrame() : null;
         const input = activePoseJob.snapshot || video;
         if (crop) {
-          // 跳格辨識：先清掉模型的追蹤記憶，避免沿用別格、別人的位置
-          await withPoseTimeout(Promise.resolve(engine.reset()), 10000, '模型重設逾時');
-          if (!activePoseJob || !sameFrame(stamp, frameStamp())) return;
+          // 跳格辨識：先清掉模型的追蹤記憶，避免沿用別格、別人的位置。
+          // 連續往前播放時，上一格剛在同一個 crop 裡辨識過，沿用追蹤就好；每格都重設會讓播放卡頓。
+          const continuing = isPlaying && lastCropInfer && lastCropInfer.source === sourceGeneration
+            && stamp.time > lastCropInfer.time && stamp.time - lastCropInfer.time < 0.25;
+          if (!continuing) {
+            await withPoseTimeout(Promise.resolve(engine.reset()), 10000, '模型重設逾時');
+            if (!activePoseJob || !sameFrame(stamp, frameStamp())) return;
+          }
+          lastCropInfer = { source: sourceGeneration, time: stamp.time };
           drawCropInput(input, crop, inferenceCanvas, inferenceCtx);
         } else inferenceCtx.drawImage(input, 0, 0, inferenceCanvas.width, inferenceCanvas.height);
         reportPoseStatus('正在辨識影格', `辨識 ${activePoseJob.time.toFixed(3)} 秒中；只顯示與目前影格一致的結果；骨架播放以已完成的畫面與骨架成對更新，可能略過中間影格；原音訊不變。`);
@@ -2122,7 +2129,8 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       return torso > 1e-6 ? a / 2 / (torso * torso) : null;
     }
     function shoulderHipQuadBase() {
-      const stamp = `${sourceGeneration}|${poseCache.size}`;
+      // 整段分析完成後基準就固定，播放時即時補進的影格不會讓它每格重算
+      const stamp = `${sourceGeneration}|${trackComplete() ? 'done' : poseCache.size}`;
       if (quadBaseCache && quadBaseCache.stamp === stamp) return quadBaseCache.value;
       const areas = [];
       for (const k of [...poseCache.keys()].sort((a, b) => a - b)) {
