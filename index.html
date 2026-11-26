@@ -1994,6 +1994,29 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       }
     }
 
+    /* 播放時的骨架補間：只在「播放中」使用，暫停、逐格、結果圖、AI 摘要都只用真的辨識結果。
+       前後 0.2 秒內各有一格真的骨架就依時間線性補間；只有前一格就沿用它。超過 0.2 秒不補，寧可不畫。 */
+    const BRIDGE_MAX_SECONDS = 0.2;
+    function playbackBridgeLandmarks(key) {
+      const t = sepKeyTime(key);
+      let prev = null, next = null;
+      for (let d = 1; d <= 12 && (prev === null || next === null); d++) {
+        if (prev === null && poseCache.get(key - d) && t - sepKeyTime(key - d) <= BRIDGE_MAX_SECONDS) prev = key - d;
+        if (next === null && poseCache.get(key + d) && sepKeyTime(key + d) - t <= BRIDGE_MAX_SECONDS) next = key + d;
+      }
+      if (prev === null) return null;
+      const a = poseCache.get(prev);
+      if (next === null) return a;
+      const b = poseCache.get(next), ta = sepKeyTime(prev), tb = sepKeyTime(next);
+      const u = tb > ta ? (t - ta) / (tb - ta) : 0;
+      return a.map((p, i) => {
+        const q = b[i];
+        if (!p || !q) return p;
+        return { ...p, x: p.x + (q.x - p.x) * u, y: p.y + (q.y - p.y) * u, z: (p.z ?? 0) + ((q.z ?? 0) - (p.z ?? 0)) * u,
+          visibility: Math.min(p.visibility ?? 1, q.visibility ?? 1) };
+      });
+    }
+
     function renderStage() {
       if (!mainCanvas.width || !mainCanvas.height) return;
       const cw = mainCanvas.width;
@@ -2032,10 +2055,13 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         // 播放中以「實際呈現在畫面上的那一格」查表，骨架與畫面同格，不超前也不落後
         const cacheKey = getPoseCacheKey(displayedFrameTime());
         const trackOwnsFrames = analysisActive() || trackComplete() || !hasTargetChoice();
-        if (poseCache.has(cacheKey)) {
+        if (poseCache.get(cacheKey)) {
           renderLandmarks = poseCache.get(cacheKey);
-        } else if (trackOwnsFrames) {
-          renderLandmarks = null; // 尚未分析到的影格：不拿別格骨架湊數
+        } else if (isPlaying && (trackOwnsFrames || poseCache.has(cacheKey))) {
+          // 播放中這格還沒有骨架：用前後最近兩格真的辨識結果補間，避免骨架一閃一閃、跳格
+          renderLandmarks = playbackBridgeLandmarks(cacheKey);
+        } else if (trackOwnsFrames || poseCache.has(cacheKey)) {
+          renderLandmarks = null; // 暫停／逐格時：尚未分析到或沒偵測到的影格不拿別格骨架湊數
         } else if (isPlaying && currentLandmarks && currentPoseStamp && currentPoseStamp.source === sourceGeneration && currentPoseStamp.seek === seekGeneration) {
           renderLandmarks = currentLandmarks;
         } else if (poseMatchesFrame() && currentLandmarks) {
