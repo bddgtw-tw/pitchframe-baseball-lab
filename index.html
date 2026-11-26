@@ -233,6 +233,9 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
     .key-legend i { display: inline-block; width: 14px; height: 10px; border-radius: 3px; vertical-align: -1px; margin: 0 4px 0 10px; }
     .key-legend .lg-ai { border: 2px dashed #3d5263; }
     .key-legend .lg-ok { border: 2px solid var(--confirm); background: rgba(251, 146, 60, .3); }
+    .quad-legend { margin: 4px 0 0; font-size: 12px; color: var(--muted); text-align: center; }
+    .quad-legend i { display: inline-block; width: 28px; height: 10px; border-radius: 3px; vertical-align: -1px; margin-right: 6px;
+      background: linear-gradient(90deg, rgba(196, 181, 253, .15), rgba(124, 58, 237, .75)); border: 1px solid #c4b5fd; }
     #resultActions { margin-top: 20px; }
     .more-links { margin-top: 12px; display: flex; flex-wrap: wrap; justify-content: center; gap: 0 18px; }
     .more-links button { min-height: 44px; font-size: 14px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
@@ -364,6 +367,7 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         <!-- 只有一顆設定按鈕：按鈕上寫出會改哪一格、改成幾秒 -->
         <button id="btnSetKey" class="key-set" type="button" aria-live="polite">分析完成後可以確認</button>
         <p class="key-legend"><i class="lg-ai"></i>AI 預選<i class="lg-ok"></i>已確認（會放進結果圖）</p>
+        <p class="quad-legend"><i></i>肩髖四邊形：比起始姿勢扭得越多，紫色越深（只看變化，不是角度或分數）</p>
         <p id="analysisCoverage" class="note warn hidden" aria-live="polite"></p>
 
         <div id="resultActions">
@@ -2099,6 +2103,45 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
       return null;
     }
 
+    /* 肩髖四邊形：兩肩＋兩髖連成四邊形，用面積比「起始姿勢」縮小多少表現扭轉，紫色越深＝扭得越多。
+       - 起始姿勢＝影片開頭前 5 個四點都可信的格子，取正規化面積中位數當基準（四點大致在同一平面）。
+       - 面積用帶正負號的鞋帶公式，再除以軀幹長度平方，孩子離鏡頭遠近不影響。
+       - 單機位 2D 畫面的形狀變化，只是視覺提示，不是角度、分數，也不得解讀為越大越好；
+         孩子整個人側轉時面積也會變小，所以只適合同一機位前後比較。 */
+    const QUAD_BASE_FRAMES = 5;
+    // 面積縮到起始的 40% 以下就用最深的紫色；只是讓顏色看得出差別，不是標準值
+    const QUAD_FULL_SHRINK = 0.6;
+    let quadBaseCache = null;
+    function shoulderHipQuadArea(lm) {
+      if (!lm || ![lm[11], lm[12], lm[24], lm[23]].every(credibleBodyPoint)) return null;
+      const w = video.videoWidth || 1, h = video.videoHeight || 1;
+      const q = [lm[11], lm[12], lm[24], lm[23]].map(pt => [pt.x * w, pt.y * h]);
+      let a = 0;
+      for (let i = 0; i < 4; i++) { const p = q[i], n = q[(i + 1) % 4]; a += p[0] * n[1] - n[0] * p[1]; }
+      const torso = Math.hypot((q[0][0] + q[1][0] - q[2][0] - q[3][0]) / 2, (q[0][1] + q[1][1] - q[2][1] - q[3][1]) / 2);
+      return torso > 1e-6 ? a / 2 / (torso * torso) : null;
+    }
+    function shoulderHipQuadBase() {
+      const stamp = `${sourceGeneration}|${poseCache.size}`;
+      if (quadBaseCache && quadBaseCache.stamp === stamp) return quadBaseCache.value;
+      const areas = [];
+      for (const k of [...poseCache.keys()].sort((a, b) => a - b)) {
+        const a = shoulderHipQuadArea(poseCache.get(k));
+        if (a !== null) areas.push(a);
+        if (areas.length >= QUAD_BASE_FRAMES) break;
+      }
+      const m = areas.length >= 3 ? median(areas) : null;
+      const value = m !== null && Math.abs(m) > 0.05 ? m : null;
+      quadBaseCache = { stamp, value };
+      return value;
+    }
+    // 0＝和起始一樣，1＝面積縮小 QUAD_FULL_SHRINK 以上（或翻面）
+    function shoulderHipQuadLevel(lm) {
+      const base = shoulderHipQuadBase(), a = shoulderHipQuadArea(lm);
+      if (base === null || a === null) return null;
+      return Math.max(0, Math.min(1, (1 - a / base) / QUAD_FULL_SHRINK));
+    }
+
     /* 繪製棒球專用精簡骨架：
        頭部、左右肩/肘/腕/髖/膝/踝、骨盆中心、腳掌三角形、身體中軸與角度標記 */
     function drawSimplifiedBaseballSkeleton(ctx, lm, isEstimated) {
@@ -2172,6 +2215,25 @@ if(typeof module!=='undefined'&&module.exports)module.exports={getPitchFrameInde
         // 實體主中軸線
         if (!isEstimated) ctx.setLineDash([]);
         drawSegment(pelvisCenter, midShoulder, isEstimated ? '#fbbf24' : '#38bdf8', 4.5);
+      }
+
+      // 肩髖四邊形（畫在骨架線條下面）
+      const quadLevel = isEstimated ? null : shoulderHipQuadLevel(lm);
+      if (quadLevel !== null && leftShoulder && rightShoulder && leftHip && rightHip) {
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(leftShoulder.x, leftShoulder.y);
+        ctx.lineTo(rightShoulder.x, rightShoulder.y);
+        ctx.lineTo(rightHip.x, rightHip.y);
+        ctx.lineTo(leftHip.x, leftHip.y);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(${Math.round(196 - 72 * quadLevel)}, ${Math.round(181 - 123 * quadLevel)}, ${Math.round(253 - 16 * quadLevel)}, ${(0.15 + 0.55 * quadLevel).toFixed(2)})`;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(196, 181, 253, 0.9)';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
       }
 
       // B. 肩線與骨盆底線
